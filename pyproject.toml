@@ -1,6 +1,6 @@
 [project]
 name = "uc-intg-nadav"
-version = "1.0.0"
+dynamic = ["version"]
 description = "NAD AV integration for Unfolded Circle Remote"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -27,3 +27,6 @@ ignore = []
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+
+[tool.setuptools.dynamic]
+version = {attr = "intg_nadav.__version__"}
