@@ -49,6 +49,8 @@ jobs:
                 --collect-all zeroconf \
                 --collect-all ucapi \
                 --collect-all ucapi_framework \
+                --hidden-import=nad_receiver \
+                --hidden-import=serial \
                 --paths . \
                 intg_${INTG_NAME}/__init__.py"
 
@@ -129,7 +131,6 @@ jobs:
         uses: actions/download-artifact@v4
 
       - name: Extract build archives from downloaded files
-        # FIXED: Added missing semicolon before 'do'
         run: |
           ls -R
           for D in *; do
