@@ -45,7 +45,7 @@ async def main():
         config_class=NADDeviceConfig,
     )
     
-    from .setup_flow import NADSetupFlow
+    from intg_nadav.setup_flow import NADSetupFlow
     setup_handler = NADSetupFlow.create_handler(driver)
     
     await driver.api.init("driver.json", setup_handler=setup_handler)

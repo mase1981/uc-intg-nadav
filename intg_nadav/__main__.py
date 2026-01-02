@@ -7,7 +7,7 @@ NAD AV Integration entry point.
 
 import sys
 import asyncio
-from intg_nadav.driver import main
+from intg_nadav import main
 
 if __name__ == "__main__":
     try:
