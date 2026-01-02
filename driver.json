@@ -1,0 +1,38 @@
+{
+  "driver_id": "nadav",
+  "version": "1.0.0",
+  "min_core_api": "0.22.0",
+  "name": {
+    "en": "NAD A/V Receivers & Amplifiers"
+  },
+  "icon": "uc:cloud-music",
+  "description": {
+    "en": "Integration for NAD A/V receivers and amplifiers with RS232/Telnet control"
+  },
+  "developer": {
+    "name": "Meir Miyara",
+    "email": "meir.miyara@gmail.com"
+  },
+  "home_page": "https://github.com/mase1981/uc-intg-nadav",
+  "release_date": "2026-01-01",
+  "setup_data_schema": {
+    "title": {
+      "en": "Integration setup"
+    },
+    "settings": [
+      {
+        "id": "info",
+        "label": {
+          "en": "Setup information"
+        },
+        "field": {
+          "label": {
+            "value": {
+              "en": "This integration communicates with NAD A/V receivers via network or serial connection to provide complete control of your audio system."
+            }
+          }
+        }
+      }
+    ]
+  }
+}

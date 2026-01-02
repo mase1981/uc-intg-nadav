@@ -1,0 +1,30 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python Debugger: NAD AV Integration",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "intg_nadav",
+            "justMyCode": false,
+            "env": {
+                "UC_CONFIG_HOME": "${workspaceFolder}/config",
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "python": "${workspaceFolder}/.venv/Scripts/python.exe"
+        },
+        {
+            "name": "Python Debugger: NAD Simulator",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/nad_simulator.py",
+            "args": ["TCP", "53"],
+            "justMyCode": false,
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "python": "${workspaceFolder}/.venv/Scripts/python.exe"
+        }
+    ]
+}
