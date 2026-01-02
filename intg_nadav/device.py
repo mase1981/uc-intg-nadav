@@ -104,8 +104,15 @@ class NADDevice(ExternalClientDevice):
     
     async def connect_client(self) -> None:
         """Connect the NAD receiver client."""
+        _LOG.info("%s Connecting client, type: %s", self.log_id, self.device_config.connection_type)
+        
+        if self._client is None:
+            _LOG.error("%s Client is None in connect_client!", self.log_id)
+            raise RuntimeError("Client not created")
+        
         if self.device_config.connection_type == "TCP":
             try:
+                _LOG.debug("%s Fetching available sources...", self.log_id)
                 self._source_list = await asyncio.to_thread(
                     self._client.available_sources
                 )
@@ -119,18 +126,75 @@ class NADDevice(ExternalClientDevice):
             else:
                 self._source_list = []
         
+        _LOG.info("%s Client connected successfully", self.log_id)
         await self._update_state()
     
     async def disconnect_client(self) -> None:
         """Disconnect NAD receiver client."""
-        pass
+        _LOG.info("%s Disconnecting client", self.log_id)
     
     def check_client_connected(self) -> bool:
         """Check if client is connected."""
-        return self._client is not None
+        connected = self._client is not None
+        _LOG.debug("%s Client connected check: %s", self.log_id, connected)
+        return connected
+    
+    async def _ensure_connected(self) -> bool:
+        """Ensure device is connected before command execution."""
+        if not self.check_client_connected():
+            _LOG.warning("%s Device not connected, attempting reconnection", self.log_id)
+            try:
+                await self.connect()
+                await asyncio.sleep(0.5)
+            except Exception as err:
+                _LOG.error("%s Reconnection failed: %s", self.log_id, err)
+                return False
+        
+        return self.check_client_connected()
+    
+    async def _execute_command(self, command_func, *args, **kwargs):
+        """
+        Execute command with connection checking and retry logic.
+        
+        Handles both connection issues and broken pipe errors.
+        """
+        if not await self._ensure_connected():
+            raise RuntimeError("Device not connected")
+        
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                result = await asyncio.to_thread(command_func, *args, **kwargs)
+                return result
+            except (OSError, BrokenPipeError, ConnectionError) as err:
+                if attempt < max_retries - 1:
+                    _LOG.warning(
+                        "%s Command failed (attempt %d/%d): %s, retrying...",
+                        self.log_id, attempt + 1, max_retries, err
+                    )
+                    await asyncio.sleep(0.5)
+                    
+                    try:
+                        await self.disconnect()
+                        await asyncio.sleep(0.2)
+                        await self.connect()
+                        await asyncio.sleep(0.5)
+                    except Exception as reconnect_err:
+                        _LOG.error("%s Reconnection failed: %s", self.log_id, reconnect_err)
+                else:
+                    _LOG.error("%s Command failed after %d attempts: %s", 
+                             self.log_id, max_retries, err)
+                    raise
+            except Exception as err:
+                _LOG.error("%s Command execution error: %s", self.log_id, err)
+                raise
     
     async def _update_state(self) -> None:
         """Update device state."""
+        if not self.check_client_connected():
+            _LOG.warning("%s Cannot update state: not connected", self.log_id)
+            return
+        
         try:
             if self.device_config.connection_type == "TCP":
                 await self._update_tcp_state()
@@ -152,49 +216,58 @@ class NADDevice(ExternalClientDevice):
     
     async def _update_tcp_state(self) -> None:
         """Update state for TCP connection."""
-        status = await asyncio.to_thread(self._client.status)
-        if status:
-            self._power = status.get("power", False)
-            self._muted = status.get("muted", False)
-            self._source = status.get("source")
-            
-            nad_volume = status.get("volume", 0)
-            if nad_volume < self._min_vol_nad:
-                self._volume = 0
-            elif nad_volume > self._max_vol_nad:
-                self._volume = 100
-            else:
-                volume_range = self._max_vol_nad - self._min_vol_nad
-                self._volume = int(((nad_volume - self._min_vol_nad) / volume_range) * 100)
+        try:
+            status = await self._execute_command(self._client.status)
+            if status:
+                self._power = status.get("power", False)
+                self._muted = status.get("muted", False)
+                self._source = status.get("source")
+                
+                nad_volume = status.get("volume", 0)
+                if nad_volume < self._min_vol_nad:
+                    self._volume = 0
+                elif nad_volume > self._max_vol_nad:
+                    self._volume = 100
+                else:
+                    volume_range = self._max_vol_nad - self._min_vol_nad
+                    self._volume = int(((nad_volume - self._min_vol_nad) / volume_range) * 100)
+        except Exception as err:
+            _LOG.error("%s TCP state update failed: %s", self.log_id, err)
     
     async def _update_serial_state(self) -> None:
         """Update state for RS232/Telnet connection."""
-        power_state = await asyncio.to_thread(self._client.main_power, "?")
-        self._power = power_state == "On"
-        
-        if self._power:
-            mute_state = await asyncio.to_thread(self._client.main_mute, "?")
-            self._muted = mute_state == "On"
+        try:
+            power_state = await self._execute_command(self._client.main_power, "?")
+            self._power = power_state == "On"
             
-            volume_db = await asyncio.to_thread(self._client.main_volume, "?")
-            if volume_db is not None:
-                min_db = self.device_config.min_volume
-                max_db = self.device_config.max_volume
-                self._volume = int(((volume_db - min_db) / (max_db - min_db)) * 100)
-            
-            source_num = await asyncio.to_thread(self._client.main_source, "?")
-            if self.device_config.sources and source_num:
-                self._source = self.device_config.sources.get(source_num)
+            if self._power:
+                mute_state = await self._execute_command(self._client.main_mute, "?")
+                self._muted = mute_state == "On"
+                
+                volume_db = await self._execute_command(self._client.main_volume, "?")
+                if volume_db is not None:
+                    min_db = self.device_config.min_volume
+                    max_db = self.device_config.max_volume
+                    self._volume = int(((volume_db - min_db) / (max_db - min_db)) * 100)
+                
+                source_num = await self._execute_command(self._client.main_source, "?")
+                if self.device_config.sources and source_num:
+                    self._source = self.device_config.sources.get(source_num)
+        except Exception as err:
+            _LOG.error("%s Serial state update failed: %s", self.log_id, err)
     
     async def turn_on(self) -> bool:
         """Turn device on."""
         try:
+            _LOG.info("%s Turning on...", self.log_id)
+            
             if self.device_config.connection_type == "TCP":
-                await asyncio.to_thread(self._client.power_on)
+                await self._execute_command(self._client.power_on)
             else:
-                await asyncio.to_thread(self._client.main_power, "=", "On")
+                await self._execute_command(self._client.main_power, "=", "On")
             
             self._power = True
+            await asyncio.sleep(0.5)
             await self._update_state()
             return True
         except Exception as err:
@@ -204,12 +277,15 @@ class NADDevice(ExternalClientDevice):
     async def turn_off(self) -> bool:
         """Turn device off."""
         try:
+            _LOG.info("%s Turning off...", self.log_id)
+            
             if self.device_config.connection_type == "TCP":
-                await asyncio.to_thread(self._client.power_off)
+                await self._execute_command(self._client.power_off)
             else:
-                await asyncio.to_thread(self._client.main_power, "=", "Off")
+                await self._execute_command(self._client.main_power, "=", "Off")
             
             self._power = False
+            await asyncio.sleep(0.5)
             await self._update_state()
             return True
         except Exception as err:
@@ -219,17 +295,20 @@ class NADDevice(ExternalClientDevice):
     async def set_volume(self, volume: int) -> bool:
         """Set volume (0-100)."""
         try:
+            _LOG.info("%s Setting volume to %d", self.log_id, volume)
+            
             if self.device_config.connection_type == "TCP":
                 volume_range = self._max_vol_nad - self._min_vol_nad
                 nad_volume = int((volume / 100) * volume_range + self._min_vol_nad)
-                await asyncio.to_thread(self._client.set_volume, nad_volume)
+                await self._execute_command(self._client.set_volume, nad_volume)
             else:
                 min_db = self.device_config.min_volume
                 max_db = self.device_config.max_volume
                 volume_db = int((volume / 100) * (max_db - min_db) + min_db)
-                await asyncio.to_thread(self._client.main_volume, "=", volume_db)
+                await self._execute_command(self._client.main_volume, "=", volume_db)
             
             self._volume = volume
+            await asyncio.sleep(0.3)
             await self._update_state()
             return True
         except Exception as err:
@@ -239,15 +318,18 @@ class NADDevice(ExternalClientDevice):
     async def volume_up(self) -> bool:
         """Increase volume."""
         try:
+            _LOG.info("%s Volume up", self.log_id)
+            
             if self.device_config.connection_type == "TCP":
                 nad_volume = self._nad_volume_from_percent(self._volume)
-                await asyncio.to_thread(
+                await self._execute_command(
                     self._client.set_volume, 
                     nad_volume + 2 * self._volume_step
                 )
             else:
-                await asyncio.to_thread(self._client.main_volume, "+")
+                await self._execute_command(self._client.main_volume, "+")
             
+            await asyncio.sleep(0.3)
             await self._update_state()
             return True
         except Exception as err:
@@ -257,15 +339,18 @@ class NADDevice(ExternalClientDevice):
     async def volume_down(self) -> bool:
         """Decrease volume."""
         try:
+            _LOG.info("%s Volume down", self.log_id)
+            
             if self.device_config.connection_type == "TCP":
                 nad_volume = self._nad_volume_from_percent(self._volume)
-                await asyncio.to_thread(
+                await self._execute_command(
                     self._client.set_volume, 
                     nad_volume - 2 * self._volume_step
                 )
             else:
-                await asyncio.to_thread(self._client.main_volume, "-")
+                await self._execute_command(self._client.main_volume, "-")
             
+            await asyncio.sleep(0.3)
             await self._update_state()
             return True
         except Exception as err:
@@ -275,16 +360,19 @@ class NADDevice(ExternalClientDevice):
     async def mute(self, mute: bool) -> bool:
         """Mute or unmute."""
         try:
+            _LOG.info("%s Mute: %s", self.log_id, mute)
+            
             if self.device_config.connection_type == "TCP":
                 if mute:
-                    await asyncio.to_thread(self._client.mute)
+                    await self._execute_command(self._client.mute)
                 else:
-                    await asyncio.to_thread(self._client.unmute)
+                    await self._execute_command(self._client.unmute)
             else:
                 state = "On" if mute else "Off"
-                await asyncio.to_thread(self._client.main_mute, "=", state)
+                await self._execute_command(self._client.main_mute, "=", state)
             
             self._muted = mute
+            await asyncio.sleep(0.3)
             await self._update_state()
             return True
         except Exception as err:
@@ -294,8 +382,10 @@ class NADDevice(ExternalClientDevice):
     async def select_source(self, source: str) -> bool:
         """Select input source."""
         try:
+            _LOG.info("%s Selecting source: %s", self.log_id, source)
+            
             if self.device_config.connection_type == "TCP":
-                await asyncio.to_thread(self._client.select_source, source)
+                await self._execute_command(self._client.select_source, source)
             else:
                 source_num = None
                 if self.device_config.sources:
@@ -305,12 +395,13 @@ class NADDevice(ExternalClientDevice):
                             break
                 
                 if source_num:
-                    await asyncio.to_thread(self._client.main_source, "=", source_num)
+                    await self._execute_command(self._client.main_source, "=", source_num)
                 else:
                     _LOG.warning("%s Source not found: %s", self.log_id, source)
                     return False
             
             self._source = source
+            await asyncio.sleep(0.5)
             await self._update_state()
             return True
         except Exception as err:
