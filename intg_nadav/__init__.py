@@ -16,7 +16,7 @@ from intg_nadav.config import NADDeviceConfig
 from intg_nadav.driver import NADDriver
 from intg_nadav.setup_flow import NADSetupFlow
 
-__version__ = "1.0.4"
+__version__ = "1.0.6"
 
 _LOG = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ async def main():
             await driver.api.set_device_state(DeviceStates.DISCONNECTED)
         
         _LOG.info("=" * 70)
-        _LOG.info("✅ NAD AV integration started successfully")
+        _LOG.info("âœ… NAD AV integration started successfully")
         _LOG.info("=" * 70)
         _LOG.info("Integration is running and ready for configuration")
         _LOG.info("Press Ctrl+C to stop")
