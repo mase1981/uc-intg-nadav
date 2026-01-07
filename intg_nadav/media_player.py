@@ -59,59 +59,55 @@ class NADMediaPlayer(MediaPlayer):
         self, entity: MediaPlayer, cmd_id: str, params: dict[str, Any] | None
     ) -> StatusCodes:
         """Handle media player commands."""
-        _LOG.info("[%s] Command: %s %s", self._device.name, cmd_id, params)
+        # _LOG.debug("[%s] Command: %s %s", self._device.name, cmd_id, params)
         
         try:
+            success = False
+            
             if cmd_id == media_player.Commands.ON:
                 success = await self._device.turn_on()
-                return StatusCodes.OK if success else StatusCodes.SERVER_ERROR
             
-            if cmd_id == media_player.Commands.OFF:
+            elif cmd_id == media_player.Commands.OFF:
                 success = await self._device.turn_off()
-                return StatusCodes.OK if success else StatusCodes.SERVER_ERROR
             
-            if cmd_id == media_player.Commands.TOGGLE:
+            elif cmd_id == media_player.Commands.TOGGLE:
                 if self._device.power:
                     success = await self._device.turn_off()
                 else:
                     success = await self._device.turn_on()
-                return StatusCodes.OK if success else StatusCodes.SERVER_ERROR
             
-            if cmd_id == media_player.Commands.VOLUME:
+            elif cmd_id == media_player.Commands.VOLUME:
                 volume = params.get("volume", 0) if params else 0
                 success = await self._device.set_volume(int(volume))
-                return StatusCodes.OK if success else StatusCodes.SERVER_ERROR
             
-            if cmd_id == media_player.Commands.VOLUME_UP:
+            elif cmd_id == media_player.Commands.VOLUME_UP:
                 success = await self._device.volume_up()
-                return StatusCodes.OK if success else StatusCodes.SERVER_ERROR
             
-            if cmd_id == media_player.Commands.VOLUME_DOWN:
+            elif cmd_id == media_player.Commands.VOLUME_DOWN:
                 success = await self._device.volume_down()
-                return StatusCodes.OK if success else StatusCodes.SERVER_ERROR
             
-            if cmd_id == media_player.Commands.MUTE_TOGGLE:
+            elif cmd_id == media_player.Commands.MUTE_TOGGLE:
                 success = await self._device.mute(not self._device.muted)
-                return StatusCodes.OK if success else StatusCodes.SERVER_ERROR
             
-            if cmd_id == media_player.Commands.MUTE:
+            elif cmd_id == media_player.Commands.MUTE:
                 success = await self._device.mute(True)
-                return StatusCodes.OK if success else StatusCodes.SERVER_ERROR
             
-            if cmd_id == media_player.Commands.UNMUTE:
+            elif cmd_id == media_player.Commands.UNMUTE:
                 success = await self._device.mute(False)
-                return StatusCodes.OK if success else StatusCodes.SERVER_ERROR
             
-            if cmd_id == media_player.Commands.SELECT_SOURCE:
-                source = params.get("source") if params else None
+            elif cmd_id == media_player.Commands.SELECT_SOURCE:
+                source = params.get("source")
                 if source:
                     success = await self._device.select_source(source)
-                    return StatusCodes.OK if success else StatusCodes.SERVER_ERROR
-                return StatusCodes.BAD_REQUEST
+                else:
+                    return StatusCodes.BAD_REQUEST
             
-            _LOG.warning("[%s] Unsupported command: %s", self._device.name, cmd_id)
-            return StatusCodes.NOT_IMPLEMENTED
+            else:
+                _LOG.warning("Unsupported command: %s", cmd_id)
+                return StatusCodes.NOT_IMPLEMENTED
+            
+            return StatusCodes.OK if success else StatusCodes.SERVER_ERROR
             
         except Exception as err:
-            _LOG.error("[%s] Command failed: %s - %s", self._device.name, cmd_id, err)
+            _LOG.error("Command failed: %s - %s", cmd_id, err)
             return StatusCodes.SERVER_ERROR
