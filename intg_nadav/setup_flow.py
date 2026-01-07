@@ -20,10 +20,8 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
     async def query_device(self, input_values: dict[str, Any]) -> NADDeviceConfig | SetupError:
         """Create device config from user input and validate connection."""
         name = input_values.get("name", "").strip()
-        # Default to Telnet (AVR) if not specified
         connection_type = input_values.get("connection_type", "Telnet")
         host = input_values.get("host", "").strip()
-        # Default port 23 for Telnet
         port = int(input_values.get("port", 23))
         serial_port = input_values.get("serial_port", "/dev/ttyUSB0").strip()
         
@@ -66,21 +64,20 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
         port: int, 
         serial_port: str
     ) -> None:
-        """Test connection to NAD device."""
+        """Test connection to NAD device and CLOSE it immediately."""
         import asyncio
         from nad_receiver import NADReceiverTCP, NADReceiverTelnet, NADReceiver
         
+        client = None
         try:
             if connection_type == "TCP":
                 client = NADReceiverTCP(host)
-                # Just verify we can communicate
                 await asyncio.to_thread(client.status)
                 _LOG.info("TCP (Digital Amp) connection test successful")
                 
             elif connection_type == "Telnet":
-                # Standard AVRs use port 23 usually
                 client = NADReceiverTelnet(host, port)
-                # Just verify we can send command and get response
+                # Send a benign command
                 response = await asyncio.to_thread(client.main_power, "?")
                 _LOG.info("Telnet (AVR) connection test successful - response: %s", response)
                 
@@ -89,11 +86,20 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
                 response = await asyncio.to_thread(client.main_power, "?")
                 _LOG.info("RS232 connection test successful - response: %s", response)
             
-            _LOG.info("Connection test successful for %s", connection_type)
-            
         except Exception as err:
             _LOG.error("Connection test failed: %s", err)
             raise
+        finally:
+            # CRITICAL: Close the connection so the main driver can use it.
+            # NAD devices often only support 1 active Telnet session.
+            if client:
+                try:
+                    if hasattr(client, "transport") and client.transport:
+                        client.transport.close()
+                    elif hasattr(client, "close"):
+                        client.close()
+                except Exception:
+                    pass
     
     def get_manual_entry_form(self) -> RequestUserInput:
         """Define manual entry fields."""
@@ -138,5 +144,4 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
         )
     
     async def discover_devices(self):
-        """NAD doesn't support auto-discovery."""
         return []

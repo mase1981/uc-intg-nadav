@@ -7,7 +7,7 @@ NAD AV device implementation for Unfolded Circle integration.
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, Callable
 from ucapi_framework import PollingDevice, DeviceEvents
 from intg_nadav.config import NADDeviceConfig
 
@@ -75,11 +75,25 @@ class NADDevice(PollingDevice):
     
     async def establish_connection(self) -> None:
         """Create NAD receiver client."""
+        # We use the internal _connect method to allow for re-connection logic
+        await self._connect()
+        
+    async def _connect(self) -> None:
+        """Internal connection logic."""
         from nad_receiver import NADReceiverTCP, NADReceiverTelnet, NADReceiver
         
         connection_type = self.device_config.connection_type
         
         try:
+            if self._nad_receiver:
+                # Close existing if open
+                try:
+                    if hasattr(self._nad_receiver, "transport") and self._nad_receiver.transport:
+                        self._nad_receiver.transport.close()
+                except Exception:
+                    pass
+                self._nad_receiver = None
+
             if connection_type == "TCP":
                 _LOG.info("%s Creating TCP client for %s", self.log_id, self.address)
                 self._nad_receiver = NADReceiverTCP(self.device_config.host)
@@ -108,7 +122,26 @@ class NADDevice(PollingDevice):
         except Exception as err:
             _LOG.error("%s Failed to create NAD client: %s", self.log_id, err)
             raise
-    
+
+    async def _execute_with_retry(self, func: Callable, *args, **kwargs) -> Any:
+        """
+        Execute a function with automatic reconnection on BrokenPipe/OSError.
+        NAD receivers drop connections frequently.
+        """
+        if self._nad_receiver is None:
+            await self._connect()
+            
+        try:
+            return await asyncio.to_thread(func, *args, **kwargs)
+        except (BrokenPipeError, OSError, EOFError) as err:
+            _LOG.warning("%s Connection lost (%s). Reconnecting and retrying...", self.log_id, err)
+            # Force Reconnect
+            await self._connect()
+            # Retry Once
+            return await asyncio.to_thread(func, *args, **kwargs)
+        except Exception:
+            raise
+
     async def poll_device(self) -> None:
         """Full poll of device state."""
         if self._nad_receiver is None:
@@ -120,12 +153,12 @@ class NADDevice(PollingDevice):
             else:
                 await self._poll_serial_telnet()
         except Exception as err:
-            _LOG.error("%s Poll failed: %s", self.log_id, err)
+            _LOG.warning("%s Poll partial fail: %s", self.log_id, err)
 
     async def _poll_tcp(self) -> None:
         """Poll TCP device state."""
         try:
-            status = await asyncio.to_thread(self._nad_receiver.status)
+            status = await self._execute_with_retry(self._nad_receiver.status)
             if status is None: return
             
             self._power = status.get("power", False)
@@ -141,12 +174,11 @@ class NADDevice(PollingDevice):
 
     async def _poll_serial_telnet(self) -> None:
         """Poll RS232/Telnet device state."""
+        # We query power first. If this fails with BrokenPipe, the retry logic handles it.
         try:
-            # Query power first
-            power_state = await asyncio.to_thread(self._nad_receiver.main_power, "?")
+            power_state = await self._execute_with_retry(self._nad_receiver.main_power, "?")
             
             if not power_state:
-                # Connection might be down or device is off
                 self._power = False
                 self._emit_update()
                 return
@@ -154,23 +186,21 @@ class NADDevice(PollingDevice):
             self._power = power_state == "On"
             
             if self._power:
-                mute_state = await asyncio.to_thread(self._nad_receiver.main_mute, "?")
+                mute_state = await self._execute_with_retry(self._nad_receiver.main_mute, "?")
                 self._muted = mute_state == "On"
                 
-                volume_db = await asyncio.to_thread(self._nad_receiver.main_volume, "?")
+                volume_db = await self._execute_with_retry(self._nad_receiver.main_volume, "?")
                 if volume_db is not None:
                     self._volume = self._db_to_percent(volume_db)
                 
                 if self.device_config.sources:
-                    source_num = await asyncio.to_thread(self._nad_receiver.main_source, "?")
+                    source_num = await self._execute_with_retry(self._nad_receiver.main_source, "?")
                     if source_num:
                         self._source = self.device_config.sources.get(source_num)
             
             self._emit_update()
-            
-        except Exception as err:
-            _LOG.warning("%s Poll partial fail: %s", self.log_id, err)
-            # Don't emit error, just skip this poll
+        except Exception:
+            pass # Suppress poll errors to avoid log spam if device is actually off
 
     def _emit_update(self):
         self.events.emit(
@@ -185,26 +215,17 @@ class NADDevice(PollingDevice):
         )
 
     async def turn_on(self) -> bool:
-        """Turn device on with connection retry."""
         if self._nad_receiver is None: return False
-        
         try:
             _LOG.info("%s Turning on...", self.log_id)
             if self.device_config.connection_type == "TCP":
-                await asyncio.to_thread(self._nad_receiver.power_on)
+                await self._execute_with_retry(self._nad_receiver.power_on)
             else:
-                # Re-initiate connection if needed for Telnet
-                if self.device_config.connection_type == "Telnet":
-                    # This helps if the socket was closed by the receiver during standby
-                    self._nad_receiver.transport = None 
-                
-                await asyncio.to_thread(self._nad_receiver.main_power, "=", "On")
+                await self._execute_with_retry(self._nad_receiver.main_power, "=", "On")
             
             self._power = True
-            # Optimistic update immediately
             self._emit_update() 
             return True
-            
         except Exception as err:
             _LOG.error("%s Turn on failed: %s", self.log_id, err)
             return False
@@ -213,9 +234,9 @@ class NADDevice(PollingDevice):
         if self._nad_receiver is None: return False
         try:
             if self.device_config.connection_type == "TCP":
-                await asyncio.to_thread(self._nad_receiver.power_off)
+                await self._execute_with_retry(self._nad_receiver.power_off)
             else:
-                await asyncio.to_thread(self._nad_receiver.main_power, "=", "Off")
+                await self._execute_with_retry(self._nad_receiver.main_power, "=", "Off")
             self._power = False
             self._emit_update()
             return True
@@ -227,10 +248,10 @@ class NADDevice(PollingDevice):
         try:
             if self.device_config.connection_type == "TCP":
                 nad_vol = self._percent_to_nad_vol(volume)
-                await asyncio.to_thread(self._nad_receiver.set_volume, nad_vol)
+                await self._execute_with_retry(self._nad_receiver.set_volume, nad_vol)
             else:
                 vol_db = self._percent_to_db(volume)
-                await asyncio.to_thread(self._nad_receiver.main_volume, "=", vol_db)
+                await self._execute_with_retry(self._nad_receiver.main_volume, "=", vol_db)
             
             self._volume = volume
             self._emit_update()
@@ -242,12 +263,10 @@ class NADDevice(PollingDevice):
         if self._nad_receiver is None: return False
         try:
             if self.device_config.connection_type == "TCP":
-                # TCP logic...
                 pass
             else:
-                await asyncio.to_thread(self._nad_receiver.main_volume, "+")
+                await self._execute_with_retry(self._nad_receiver.main_volume, "+")
             
-            # Optimistic update: assume +1 step (approx 1-2%)
             self._volume = min(100, self._volume + 1) 
             self._emit_update()
             return True
@@ -260,7 +279,7 @@ class NADDevice(PollingDevice):
             if self.device_config.connection_type == "TCP":
                 pass
             else:
-                await asyncio.to_thread(self._nad_receiver.main_volume, "-")
+                await self._execute_with_retry(self._nad_receiver.main_volume, "-")
             
             self._volume = max(0, self._volume - 1)
             self._emit_update()
@@ -272,11 +291,11 @@ class NADDevice(PollingDevice):
         if self._nad_receiver is None: return False
         try:
             if self.device_config.connection_type == "TCP":
-                if mute: await asyncio.to_thread(self._nad_receiver.mute)
-                else: await asyncio.to_thread(self._nad_receiver.unmute)
+                if mute: await self._execute_with_retry(self._nad_receiver.mute)
+                else: await self._execute_with_retry(self._nad_receiver.unmute)
             else:
                 state = "On" if mute else "Off"
-                await asyncio.to_thread(self._nad_receiver.main_mute, "=", state)
+                await self._execute_with_retry(self._nad_receiver.main_mute, "=", state)
             
             self._muted = mute
             self._emit_update()
@@ -288,9 +307,8 @@ class NADDevice(PollingDevice):
         if self._nad_receiver is None: return False
         try:
             if self.device_config.connection_type == "TCP":
-                await asyncio.to_thread(self._nad_receiver.select_source, source)
+                await self._execute_with_retry(self._nad_receiver.select_source, source)
             else:
-                # Find ID logic...
                 source_num = None
                 if self.device_config.sources:
                     for num, name in self.device_config.sources.items():
@@ -298,7 +316,7 @@ class NADDevice(PollingDevice):
                             source_num = num
                             break
                 if source_num:
-                    await asyncio.to_thread(self._nad_receiver.main_source, "=", source_num)
+                    await self._execute_with_retry(self._nad_receiver.main_source, "=", source_num)
             
             self._source = source
             self._emit_update()
@@ -308,7 +326,6 @@ class NADDevice(PollingDevice):
 
     # Helpers
     def _nad_vol_to_percent(self, nad_vol):
-        # ... existing logic ...
         if nad_vol < self._min_vol_nad: return 0
         if nad_vol > self._max_vol_nad: return 100
         return int(((nad_vol - self._min_vol_nad) / (self._max_vol_nad - self._min_vol_nad)) * 100)
