@@ -18,7 +18,7 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
     """Setup flow for NAD integration."""
     
     async def query_device(self, input_values: dict[str, Any]) -> NADDeviceConfig | SetupError:
-        """Create device config from user input and validate connection."""
+        """Create device config from user input."""
         name = input_values.get("name", "").strip()
         connection_type = input_values.get("connection_type", "Telnet")
         host = input_values.get("host", "").strip()
@@ -38,11 +38,7 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
             
             identifier = serial_port.replace("/", "_").replace("\\", "_")
         
-        try:
-            await self._test_connection(connection_type, host, port, serial_port)
-        except Exception as err:
-            _LOG.error("Connection test failed: %s", err)
-            return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
+        _LOG.info("Creating NAD device config: %s (%s)", name, connection_type)
         
         return NADDeviceConfig(
             identifier=identifier,
@@ -57,67 +53,28 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
             sources=None,
         )
     
-    async def _test_connection(
-        self, 
-        connection_type: str, 
-        host: str, 
-        port: int, 
-        serial_port: str
-    ) -> None:
-        """Test connection to NAD device and CLOSE it immediately."""
-        import asyncio
-        from nad_receiver import NADReceiverTCP, NADReceiverTelnet, NADReceiver
-        
-        client = None
-        try:
-            if connection_type == "TCP":
-                client = NADReceiverTCP(host)
-                await asyncio.to_thread(client.status)
-                _LOG.info("TCP (Digital Amp) connection test successful")
-                
-            elif connection_type == "Telnet":
-                client = NADReceiverTelnet(host, port)
-                
-                await asyncio.sleep(0.5)
-                
-                # Send a benign command
-                response = await asyncio.to_thread(client.main_power, "?")
-                _LOG.info("Telnet (AVR) connection test successful - response: %s", response)
-                
-                await asyncio.sleep(0.5)
-                
-            else:  # RS232
-                client = NADReceiver(serial_port)
-                await asyncio.sleep(0.5)
-                response = await asyncio.to_thread(client.main_power, "?")
-                _LOG.info("RS232 connection test successful - response: %s", response)
-                await asyncio.sleep(0.5)
-            
-        except Exception as err:
-            _LOG.error("Connection test failed: %s", err)
-            raise
-        finally:
-            # NAD devices often only support 1 active Telnet session.
-            if client:
-                try:
-                    if hasattr(client, "transport") and client.transport:
-                        _LOG.info("Closing Telnet transport...")
-                        client.transport.close()
-                        await asyncio.sleep(1.0)
-                        _LOG.info("Telnet transport closed")
-                    elif hasattr(client, "close"):
-                        _LOG.info("Closing connection...")
-                        client.close()
-                        await asyncio.sleep(1.0)
-                        _LOG.info("Connection closed")
-                except Exception as close_err:
-                    _LOG.warning("Error closing test connection: %s", close_err)
-    
     def get_manual_entry_form(self) -> RequestUserInput:
-        """Define manual entry fields."""
+        """Define manual entry fields with user instructions."""
         return RequestUserInput(
             {"en": "Configure NAD Device"},
             [
+                {
+                    "id": "info",
+                    "label": {"en": "⚠️ IMPORTANT - Before Setup"},
+                    "field": {
+                        "label": {
+                            "value": {
+                                "en": (
+                                    "Please ensure your NAD device is:\n"
+                                    "• Powered ON\n"
+                                    "• Connected to your network (for TCP/Telnet)\n"
+                                    "• Has a static IP or DHCP reservation\n\n"
+                                    "The integration will connect when you press 'Complete Setup'."
+                                )
+                            }
+                        }
+                    },
+                },
                 {
                     "id": "name",
                     "label": {"en": "Device Name"},
@@ -125,13 +82,13 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
                 },
                 {
                     "id": "connection_type",
-                    "label": {"en": "Device Type / Connection"},
+                    "label": {"en": "Connection Type"},
                     "field": {
                         "dropdown": {
                             "value": "Telnet",
                             "items": [
-                                {"id": "Telnet", "label": {"en": "Network AVR (T-Series) [Telnet]"}},
-                                {"id": "TCP", "label": {"en": "Digital Amp (D-Series) [TCP]"}},
+                                {"id": "Telnet", "label": {"en": "Telnet (T-Series AVR - Port 23)"}},
+                                {"id": "TCP", "label": {"en": "TCP (D-Series Digital Amp - Port 53)"}},
                                 {"id": "RS232", "label": {"en": "RS-232 Serial"}},
                             ],
                         }
@@ -139,12 +96,12 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
                 },
                 {
                     "id": "host",
-                    "label": {"en": "IP Address"},
-                    "field": {"text": {"value": ""}},
+                    "label": {"en": "IP Address (for TCP/Telnet)"},
+                    "field": {"text": {"value": "192.168.1.100"}},
                 },
                 {
                     "id": "port",
-                    "label": {"en": "Port (Default: 23)"},
+                    "label": {"en": "Port (Default: 23 for Telnet, 53 for TCP)"},
                     "field": {"number": {"value": 23, "min": 1, "max": 65535}},
                 },
                 {
@@ -156,4 +113,5 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
         )
     
     async def discover_devices(self):
+        """Discovery not supported for NAD devices."""
         return []

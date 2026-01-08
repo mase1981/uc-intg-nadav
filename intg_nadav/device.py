@@ -88,11 +88,9 @@ class NADDevice(PollingDevice):
                 try:
                     if hasattr(self._nad_receiver, "transport") and self._nad_receiver.transport:
                         self._nad_receiver.transport.close()
-                        await asyncio.sleep(0.5)
                 except Exception:
                     pass
                 self._nad_receiver = None
-            await asyncio.sleep(1.0)
 
             if connection_type == "TCP":
                 _LOG.info("%s Creating TCP client for %s", self.log_id, self.address)
@@ -109,15 +107,12 @@ class NADDevice(PollingDevice):
                     self.device_config.host, 
                     self.device_config.port
                 )
-                # CRITICAL FIX: Add delay after creating Telnet connection
-                await asyncio.sleep(0.5)
                 self._source_list = list(self.device_config.sources.values()) if self.device_config.sources else []
                     
             else:
                 _LOG.info("%s Creating RS232 client for %s", 
                          self.log_id, self.device_config.serial_port)
                 self._nad_receiver = NADReceiver(self.device_config.serial_port)
-                await asyncio.sleep(0.5)
                 self._source_list = list(self.device_config.sources.values()) if self.device_config.sources else []
             
             _LOG.info("%s NAD client created successfully", self.log_id)
@@ -215,13 +210,18 @@ class NADDevice(PollingDevice):
         )
 
     async def turn_on(self) -> bool:
-        if self._nad_receiver is None: return False
+        """Turn device on."""
+        if self._nad_receiver is None: 
+            return False
         try:
             _LOG.info("%s Turning on...", self.log_id)
             if self.device_config.connection_type == "TCP":
                 await self._execute_with_retry(self._nad_receiver.power_on)
             else:
-                await self._execute_with_retry(self._nad_receiver.main_power, "on")
+                # Telnet/RS232: main_power(operator, value)
+                # operator="=" means "set to"
+                # value="On" is the power state
+                await self._execute_with_retry(self._nad_receiver.main_power, "=", "On")
             
             self._power = True
             self._emit_update() 
@@ -231,12 +231,16 @@ class NADDevice(PollingDevice):
             return False
     
     async def turn_off(self) -> bool:
-        if self._nad_receiver is None: return False
+        """Turn device off."""
+        if self._nad_receiver is None: 
+            return False
         try:
+            _LOG.info("%s Turning off...", self.log_id)
             if self.device_config.connection_type == "TCP":
                 await self._execute_with_retry(self._nad_receiver.power_off)
             else:
-                await self._execute_with_retry(self._nad_receiver.main_power, "off")
+                await self._execute_with_retry(self._nad_receiver.main_power, "=", "Off")
+            
             self._power = False
             self._emit_update()
             return True
@@ -245,7 +249,9 @@ class NADDevice(PollingDevice):
             return False
     
     async def set_volume(self, volume: int) -> bool:
-        if self._nad_receiver is None: return False
+        """Set volume level (0-100)."""
+        if self._nad_receiver is None: 
+            return False
         try:
             if self.device_config.connection_type == "TCP":
                 nad_vol = self._percent_to_nad_vol(volume)
@@ -262,10 +268,16 @@ class NADDevice(PollingDevice):
             return False
     
     async def volume_up(self) -> bool:
-        if self._nad_receiver is None: return False
+        """Increase volume by one step."""
+        if self._nad_receiver is None: 
+            return False
         try:
             if self.device_config.connection_type == "TCP":
-                pass
+                # TCP doesn't support volume up/down commands
+                current = self._volume
+                new_volume = min(100, current + 1)
+                nad_vol = self._percent_to_nad_vol(new_volume)
+                await self._execute_with_retry(self._nad_receiver.set_volume, nad_vol)
             else:
                 await self._execute_with_retry(self._nad_receiver.main_volume, "+")
             
@@ -277,10 +289,16 @@ class NADDevice(PollingDevice):
             return False
     
     async def volume_down(self) -> bool:
-        if self._nad_receiver is None: return False
+        """Decrease volume by one step."""
+        if self._nad_receiver is None: 
+            return False
         try:
             if self.device_config.connection_type == "TCP":
-                pass
+                # TCP doesn't support volume up/down commands
+                current = self._volume
+                new_volume = max(0, current - 1)
+                nad_vol = self._percent_to_nad_vol(new_volume)
+                await self._execute_with_retry(self._nad_receiver.set_volume, nad_vol)
             else:
                 await self._execute_with_retry(self._nad_receiver.main_volume, "-")
             
@@ -292,14 +310,18 @@ class NADDevice(PollingDevice):
             return False
             
     async def mute(self, mute: bool) -> bool:
-        if self._nad_receiver is None: return False
+        """Set mute state."""
+        if self._nad_receiver is None: 
+            return False
         try:
             if self.device_config.connection_type == "TCP":
-                if mute: await self._execute_with_retry(self._nad_receiver.mute)
-                else: await self._execute_with_retry(self._nad_receiver.unmute)
+                if mute: 
+                    await self._execute_with_retry(self._nad_receiver.mute)
+                else: 
+                    await self._execute_with_retry(self._nad_receiver.unmute)
             else:
-                state = "on" if mute else "off"
-                await self._execute_with_retry(self._nad_receiver.main_mute, state)
+                state = "On" if mute else "Off"
+                await self._execute_with_retry(self._nad_receiver.main_mute, "=", state)
             
             self._muted = mute
             self._emit_update()
@@ -309,7 +331,9 @@ class NADDevice(PollingDevice):
             return False
 
     async def select_source(self, source: str) -> bool:
-        if self._nad_receiver is None: return False
+        """Select input source."""
+        if self._nad_receiver is None: 
+            return False
         try:
             if self.device_config.connection_type == "TCP":
                 await self._execute_with_retry(self._nad_receiver.select_source, source)
@@ -331,19 +355,25 @@ class NADDevice(PollingDevice):
             return False
 
     def _nad_vol_to_percent(self, nad_vol):
-        if nad_vol < self._min_vol_nad: return 0
-        if nad_vol > self._max_vol_nad: return 100
+        """Convert NAD volume (0-200) to percentage (0-100)."""
+        if nad_vol < self._min_vol_nad: 
+            return 0
+        if nad_vol > self._max_vol_nad: 
+            return 100
         return int(((nad_vol - self._min_vol_nad) / (self._max_vol_nad - self._min_vol_nad)) * 100)
 
     def _percent_to_nad_vol(self, percent):
+        """Convert percentage (0-100) to NAD volume (0-200)."""
         return int((percent / 100) * (self._max_vol_nad - self._min_vol_nad) + self._min_vol_nad)
 
     def _db_to_percent(self, db):
+        """Convert dB to percentage (0-100)."""
         min_db = self.device_config.min_volume
         max_db = self.device_config.max_volume
         return int(((db - min_db) / (max_db - min_db)) * 100)
 
     def _percent_to_db(self, percent):
+        """Convert percentage (0-100) to dB."""
         min_db = self.device_config.min_volume
         max_db = self.device_config.max_volume
         return int((percent / 100) * (max_db - min_db) + min_db)
