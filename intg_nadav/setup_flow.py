@@ -77,29 +77,41 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
                 
             elif connection_type == "Telnet":
                 client = NADReceiverTelnet(host, port)
+                
+                await asyncio.sleep(0.5)
+                
                 # Send a benign command
                 response = await asyncio.to_thread(client.main_power, "?")
                 _LOG.info("Telnet (AVR) connection test successful - response: %s", response)
                 
+                await asyncio.sleep(0.5)
+                
             else:  # RS232
                 client = NADReceiver(serial_port)
+                await asyncio.sleep(0.5)
                 response = await asyncio.to_thread(client.main_power, "?")
                 _LOG.info("RS232 connection test successful - response: %s", response)
+                await asyncio.sleep(0.5)
             
         except Exception as err:
             _LOG.error("Connection test failed: %s", err)
             raise
         finally:
-            # CRITICAL: Close the connection so the main driver can use it.
             # NAD devices often only support 1 active Telnet session.
             if client:
                 try:
                     if hasattr(client, "transport") and client.transport:
+                        _LOG.info("Closing Telnet transport...")
                         client.transport.close()
+                        await asyncio.sleep(1.0)
+                        _LOG.info("Telnet transport closed")
                     elif hasattr(client, "close"):
+                        _LOG.info("Closing connection...")
                         client.close()
-                except Exception:
-                    pass
+                        await asyncio.sleep(1.0)
+                        _LOG.info("Connection closed")
+                except Exception as close_err:
+                    _LOG.warning("Error closing test connection: %s", close_err)
     
     def get_manual_entry_form(self) -> RequestUserInput:
         """Define manual entry fields."""

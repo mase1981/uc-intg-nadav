@@ -75,7 +75,6 @@ class NADDevice(PollingDevice):
     
     async def establish_connection(self) -> None:
         """Create NAD receiver client."""
-        # We use the internal _connect method to allow for re-connection logic
         await self._connect()
         
     async def _connect(self) -> None:
@@ -86,13 +85,14 @@ class NADDevice(PollingDevice):
         
         try:
             if self._nad_receiver:
-                # Close existing if open
                 try:
                     if hasattr(self._nad_receiver, "transport") and self._nad_receiver.transport:
                         self._nad_receiver.transport.close()
+                        await asyncio.sleep(0.5)
                 except Exception:
                     pass
                 self._nad_receiver = None
+            await asyncio.sleep(1.0)
 
             if connection_type == "TCP":
                 _LOG.info("%s Creating TCP client for %s", self.log_id, self.address)
@@ -109,12 +109,15 @@ class NADDevice(PollingDevice):
                     self.device_config.host, 
                     self.device_config.port
                 )
+                # CRITICAL FIX: Add delay after creating Telnet connection
+                await asyncio.sleep(0.5)
                 self._source_list = list(self.device_config.sources.values()) if self.device_config.sources else []
                     
             else:
                 _LOG.info("%s Creating RS232 client for %s", 
                          self.log_id, self.device_config.serial_port)
                 self._nad_receiver = NADReceiver(self.device_config.serial_port)
+                await asyncio.sleep(0.5)
                 self._source_list = list(self.device_config.sources.values()) if self.device_config.sources else []
             
             _LOG.info("%s NAD client created successfully", self.log_id)
@@ -135,9 +138,7 @@ class NADDevice(PollingDevice):
             return await asyncio.to_thread(func, *args, **kwargs)
         except (BrokenPipeError, OSError, EOFError) as err:
             _LOG.warning("%s Connection lost (%s). Reconnecting and retrying...", self.log_id, err)
-            # Force Reconnect
             await self._connect()
-            # Retry Once
             return await asyncio.to_thread(func, *args, **kwargs)
         except Exception:
             raise
@@ -174,7 +175,6 @@ class NADDevice(PollingDevice):
 
     async def _poll_serial_telnet(self) -> None:
         """Poll RS232/Telnet device state."""
-        # We query power first. If this fails with BrokenPipe, the retry logic handles it.
         try:
             power_state = await self._execute_with_retry(self._nad_receiver.main_power, "?")
             
@@ -200,7 +200,7 @@ class NADDevice(PollingDevice):
             
             self._emit_update()
         except Exception:
-            pass # Suppress poll errors to avoid log spam if device is actually off
+            pass
 
     def _emit_update(self):
         self.events.emit(
@@ -221,7 +221,7 @@ class NADDevice(PollingDevice):
             if self.device_config.connection_type == "TCP":
                 await self._execute_with_retry(self._nad_receiver.power_on)
             else:
-                await self._execute_with_retry(self._nad_receiver.main_power, "=", "On")
+                await self._execute_with_retry(self._nad_receiver.main_power, "on")
             
             self._power = True
             self._emit_update() 
@@ -236,11 +236,12 @@ class NADDevice(PollingDevice):
             if self.device_config.connection_type == "TCP":
                 await self._execute_with_retry(self._nad_receiver.power_off)
             else:
-                await self._execute_with_retry(self._nad_receiver.main_power, "=", "Off")
+                await self._execute_with_retry(self._nad_receiver.main_power, "off")
             self._power = False
             self._emit_update()
             return True
-        except Exception:
+        except Exception as err:
+            _LOG.error("%s Turn off failed: %s", self.log_id, err)
             return False
     
     async def set_volume(self, volume: int) -> bool:
@@ -256,7 +257,8 @@ class NADDevice(PollingDevice):
             self._volume = volume
             self._emit_update()
             return True
-        except Exception:
+        except Exception as err:
+            _LOG.error("%s Set volume failed: %s", self.log_id, err)
             return False
     
     async def volume_up(self) -> bool:
@@ -270,7 +272,8 @@ class NADDevice(PollingDevice):
             self._volume = min(100, self._volume + 1) 
             self._emit_update()
             return True
-        except Exception:
+        except Exception as err:
+            _LOG.error("%s Volume up failed: %s", self.log_id, err)
             return False
     
     async def volume_down(self) -> bool:
@@ -284,7 +287,8 @@ class NADDevice(PollingDevice):
             self._volume = max(0, self._volume - 1)
             self._emit_update()
             return True
-        except Exception:
+        except Exception as err:
+            _LOG.error("%s Volume down failed: %s", self.log_id, err)
             return False
             
     async def mute(self, mute: bool) -> bool:
@@ -294,13 +298,14 @@ class NADDevice(PollingDevice):
                 if mute: await self._execute_with_retry(self._nad_receiver.mute)
                 else: await self._execute_with_retry(self._nad_receiver.unmute)
             else:
-                state = "On" if mute else "Off"
-                await self._execute_with_retry(self._nad_receiver.main_mute, "=", state)
+                state = "on" if mute else "off"
+                await self._execute_with_retry(self._nad_receiver.main_mute, state)
             
             self._muted = mute
             self._emit_update()
             return True
-        except Exception:
+        except Exception as err:
+            _LOG.error("%s Mute failed: %s", self.log_id, err)
             return False
 
     async def select_source(self, source: str) -> bool:
@@ -321,10 +326,10 @@ class NADDevice(PollingDevice):
             self._source = source
             self._emit_update()
             return True
-        except Exception:
+        except Exception as err:
+            _LOG.error("%s Select source failed: %s", self.log_id, err)
             return False
 
-    # Helpers
     def _nad_vol_to_percent(self, nad_vol):
         if nad_vol < self._min_vol_nad: return 0
         if nad_vol > self._max_vol_nad: return 100
