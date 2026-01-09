@@ -97,6 +97,7 @@ class NADDevice(PollingDevice):
                 self._nad_receiver = NADReceiverTCP(self.device_config.host)
                 try:
                     self._source_list = self._nad_receiver.available_sources()
+                    _LOG.info("%s TCP sources discovered: %s", self.log_id, self._source_list)
                 except Exception:
                     self._source_list = []
                     
@@ -107,13 +108,25 @@ class NADDevice(PollingDevice):
                     self.device_config.host, 
                     self.device_config.port
                 )
-                self._source_list = list(self.device_config.sources.values()) if self.device_config.sources else []
+                # CRITICAL FIX: Build source list from configured sources
+                if self.device_config.sources:
+                    self._source_list = list(self.device_config.sources.values())
+                    _LOG.info("%s Telnet sources configured: %s", self.log_id, self._source_list)
+                else:
+                    self._source_list = []
+                    _LOG.warning("%s No sources configured for Telnet connection", self.log_id)
                     
             else:
                 _LOG.info("%s Creating RS232 client for %s", 
                          self.log_id, self.device_config.serial_port)
                 self._nad_receiver = NADReceiver(self.device_config.serial_port)
-                self._source_list = list(self.device_config.sources.values()) if self.device_config.sources else []
+                # CRITICAL FIX: Build source list from configured sources
+                if self.device_config.sources:
+                    self._source_list = list(self.device_config.sources.values())
+                    _LOG.info("%s RS232 sources configured: %s", self.log_id, self._source_list)
+                else:
+                    self._source_list = []
+                    _LOG.warning("%s No sources configured for RS232 connection", self.log_id)
             
             _LOG.info("%s NAD client created successfully", self.log_id)
             
@@ -188,25 +201,48 @@ class NADDevice(PollingDevice):
                 if volume_db is not None:
                     self._volume = self._db_to_percent(volume_db)
                 
+                # CRITICAL FIX: Query source and map to friendly name
                 if self.device_config.sources:
-                    source_num = await self._execute_with_retry(self._nad_receiver.main_source, "?")
-                    if source_num:
-                        self._source = self.device_config.sources.get(source_num)
+                    try:
+                        source_num = await self._execute_with_retry(self._nad_receiver.main_source, "?")
+                        _LOG.debug("%s Source query returned: %s (type: %s)", 
+                                  self.log_id, source_num, type(source_num))
+                        
+                        if source_num is not None:
+                            # Convert to int if it's a string
+                            if isinstance(source_num, str):
+                                source_num = int(source_num)
+                            
+                            # Map source number to friendly name
+                            if source_num in self.device_config.sources:
+                                self._source = self.device_config.sources[source_num]
+                                _LOG.debug("%s Mapped source %d to '%s'", 
+                                          self.log_id, source_num, self._source)
+                            else:
+                                _LOG.warning("%s Source %d not in configured sources: %s", 
+                                           self.log_id, source_num, self.device_config.sources)
+                                self._source = f"Source {source_num}"
+                    except Exception as src_err:
+                        _LOG.debug("%s Source query error: %s", self.log_id, src_err)
+                        self._source = None
             
             self._emit_update()
-        except Exception:
-            pass
+        except Exception as err:
+            _LOG.debug("%s Poll error: %s", self.log_id, err)
 
     def _emit_update(self):
+        """Emit device state update."""
+        update_data = {
+            "state": "ON" if self._power else "OFF",
+            "volume": self._volume,
+            "muted": self._muted,
+            "source": self._source,
+        }
+        _LOG.debug("%s Emitting update: %s", self.log_id, update_data)
         self.events.emit(
             DeviceEvents.UPDATE,
             self.identifier,
-            {
-                "state": "ON" if self._power else "OFF",
-                "volume": self._volume,
-                "muted": self._muted,
-                "source": self._source,
-            }
+            update_data
         )
 
     async def turn_on(self) -> bool:
@@ -218,9 +254,6 @@ class NADDevice(PollingDevice):
             if self.device_config.connection_type == "TCP":
                 await self._execute_with_retry(self._nad_receiver.power_on)
             else:
-                # Telnet/RS232: main_power(operator, value)
-                # operator="=" means "set to"
-                # value="On" is the power state
                 await self._execute_with_retry(self._nad_receiver.main_power, "=", "On")
             
             self._power = True
@@ -273,7 +306,6 @@ class NADDevice(PollingDevice):
             return False
         try:
             if self.device_config.connection_type == "TCP":
-                # TCP doesn't support volume up/down commands
                 current = self._volume
                 new_volume = min(100, current + 1)
                 nad_vol = self._percent_to_nad_vol(new_volume)
@@ -294,7 +326,6 @@ class NADDevice(PollingDevice):
             return False
         try:
             if self.device_config.connection_type == "TCP":
-                # TCP doesn't support volume up/down commands
                 current = self._volume
                 new_volume = max(0, current - 1)
                 nad_vol = self._percent_to_nad_vol(new_volume)
@@ -331,21 +362,30 @@ class NADDevice(PollingDevice):
             return False
 
     async def select_source(self, source: str) -> bool:
-        """Select input source."""
+        """Select input source by friendly name."""
         if self._nad_receiver is None: 
             return False
         try:
+            _LOG.info("%s Selecting source: %s", self.log_id, source)
+            
             if self.device_config.connection_type == "TCP":
                 await self._execute_with_retry(self._nad_receiver.select_source, source)
             else:
+                # Find source number by friendly name
                 source_num = None
                 if self.device_config.sources:
                     for num, name in self.device_config.sources.items():
                         if name == source:
                             source_num = num
                             break
-                if source_num:
+                
+                if source_num is not None:
+                    _LOG.info("%s Mapping '%s' to source number %d", self.log_id, source, source_num)
                     await self._execute_with_retry(self._nad_receiver.main_source, "=", source_num)
+                else:
+                    _LOG.error("%s Source '%s' not found in configuration: %s", 
+                              self.log_id, source, self.device_config.sources)
+                    return False
             
             self._source = source
             self._emit_update()
