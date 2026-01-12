@@ -74,8 +74,17 @@ class NADDevice(PollingDevice):
         return self._source_list
     
     async def establish_connection(self) -> None:
-        """Create NAD receiver client."""
+        """Create NAD receiver client and verify connectivity."""
         await self._connect()
+
+        # Verify connection with initial status poll
+        try:
+            await asyncio.wait_for(self.poll_device(), timeout=5.0)
+            _LOG.info("%s Connection established and verified", self.log_id)
+        except asyncio.TimeoutError:
+            _LOG.warning("%s Connection established but initial poll timed out", self.log_id)
+        except Exception as err:
+            _LOG.warning("%s Connection established but initial poll failed: %s", self.log_id, err)
         
     async def _connect(self) -> None:
         """Internal connection logic."""
