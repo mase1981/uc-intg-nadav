@@ -45,22 +45,12 @@ class NADMediaPlayer(MediaPlayer):
             features.append(Features.SELECT_SOURCE)
             attributes[Attributes.SOURCE] = ""
             attributes[Attributes.SOURCE_LIST] = device.source_list
-            _LOG.info("NAD Media Player initialized with %d sources: %s", 
+            _LOG.info("NAD Media Player initialized with %d sources: %s",
                      len(device.source_list), device.source_list)
-        
-        options = {
-            Options.SIMPLE_COMMANDS: [
-                Commands.ON,
-                Commands.OFF,
-                Commands.VOLUME_UP,
-                Commands.VOLUME_DOWN,
-                Commands.MUTE_TOGGLE,
-            ]
-        }
-        
-        # Add source selection to simple commands if available
-        if device.source_list:
-            options[Options.SIMPLE_COMMANDS].append(Commands.SELECT_SOURCE)
+
+        # Note: No Options.SIMPLE_COMMANDS - the Features list already declares all commands
+        # Using SIMPLE_COMMANDS would create duplicate buttons in the UI
+        options = {}
         
         super().__init__(
             identifier=device_config.identifier,
@@ -77,10 +67,15 @@ class NADMediaPlayer(MediaPlayer):
     ) -> StatusCodes:
         """Handle media player commands."""
         _LOG.info("[%s] Command: %s %s", self._device.name, cmd_id, params or "")
-        
+
+        # Check if device is connected
+        if self._device._nad_receiver is None:
+            _LOG.warning("[%s] Device not yet connected, command rejected", self._device.name)
+            return StatusCodes.SERVICE_UNAVAILABLE
+
         try:
             success = False
-            
+
             if cmd_id == Commands.ON:
                 success = await self._device.turn_on()
             

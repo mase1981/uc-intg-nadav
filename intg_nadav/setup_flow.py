@@ -31,19 +31,32 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
             host = input_values.get("host", "").strip()
             port = int(input_values.get("port", 23))
             serial_port = input_values.get("serial_port", "/dev/ttyUSB0").strip()
-            
+
             if connection_type in ("TCP", "Telnet"):
                 if not host:
                     _LOG.warning("Host required for Network connection")
                     return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
-                
+
                 identifier = f"{host}_{port}"
+
+                # Test network connectivity
+                _LOG.info("Testing connectivity to %s:%d...", host, port)
+                if not await self._test_network_connection(host, port, connection_type):
+                    _LOG.error("Failed to connect to %s:%d", host, port)
+                    return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
+
             else:
                 if not serial_port:
                     _LOG.warning("Serial port required for RS232 connection")
                     return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
-                
+
                 identifier = serial_port.replace("/", "_").replace("\\", "_")
+
+                # Test serial port accessibility
+                _LOG.info("Testing serial port %s...", serial_port)
+                if not await self._test_serial_connection(serial_port):
+                    _LOG.error("Cannot access serial port %s", serial_port)
+                    return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
             
             # Store device info for next screen
             self._device_info = {
@@ -251,3 +264,75 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
     async def discover_devices(self):
         """Discovery not supported for NAD devices."""
         return []
+
+    async def _test_network_connection(self, host: str, port: int, connection_type: str) -> bool:
+        """Test network connectivity to NAD device."""
+        import asyncio
+        from nad_receiver import NADReceiverTCP, NADReceiverTelnet
+
+        try:
+            if connection_type == "TCP":
+                # Test TCP connection (D-Series)
+                receiver = NADReceiverTCP(host)
+                try:
+                    status = await asyncio.wait_for(
+                        asyncio.to_thread(receiver.status),
+                        timeout=5.0
+                    )
+                    if status is not None:
+                        _LOG.info("TCP connection successful, device responded")
+                        return True
+                except asyncio.TimeoutError:
+                    _LOG.warning("TCP connection timeout")
+                    return False
+            else:
+                # Test Telnet connection (T-Series)
+                receiver = NADReceiverTelnet(host, port)
+                try:
+                    power_state = await asyncio.wait_for(
+                        asyncio.to_thread(receiver.main_power, "?"),
+                        timeout=5.0
+                    )
+                    if power_state is not None:
+                        _LOG.info("Telnet connection successful, device responded: %s", power_state)
+                        return True
+                except asyncio.TimeoutError:
+                    _LOG.warning("Telnet connection timeout")
+                    return False
+        except Exception as err:
+            _LOG.error("Connection test failed: %s", err)
+            return False
+
+    async def _test_serial_connection(self, serial_port: str) -> bool:
+        """Test serial port accessibility."""
+        import asyncio
+        import os
+
+        try:
+            # First check if the serial port device exists (Unix-like systems)
+            if os.name != 'nt' and not os.path.exists(serial_port):
+                _LOG.error("Serial port %s does not exist", serial_port)
+                return False
+
+            # Try to import and create NADReceiver
+            from nad_receiver import NADReceiver
+
+            try:
+                receiver = NADReceiver(serial_port)
+                # Test with a simple query
+                power_state = await asyncio.wait_for(
+                    asyncio.to_thread(receiver.main_power, "?"),
+                    timeout=5.0
+                )
+                if power_state is not None:
+                    _LOG.info("RS232 connection successful, device responded: %s", power_state)
+                    return True
+                else:
+                    _LOG.warning("RS232 device did not respond")
+                    return False
+            except asyncio.TimeoutError:
+                _LOG.warning("RS232 connection timeout")
+                return False
+        except Exception as err:
+            _LOG.error("Serial connection test failed: %s", err)
+            return False
