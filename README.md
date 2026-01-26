@@ -19,7 +19,7 @@ Control your NAD A/V receivers and amplifiers (digital amplifiers, classic recei
 This integration provides comprehensive control of NAD A/V receivers and amplifiers through multiple connection protocols (TCP, Telnet), delivering seamless integration with your Unfolded Circle Remote for complete home theater control.
 
 ---
-## 💰 Support Development
+## ❤️ Support Development ❤️
 
 If you find this integration useful, consider supporting development:
 
