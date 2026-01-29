@@ -17,13 +17,14 @@ _LOG = logging.getLogger(__name__)
 class NADDevice(PollingDevice):
     """NAD AV receiver/amplifier using polling pattern."""
     
-    def __init__(self, device_config: NADDeviceConfig, loop=None, config_manager=None):
+    def __init__(self, device_config: NADDeviceConfig, loop=None, config_manager=None, driver=None):
         """Initialize NAD device."""
         super().__init__(
             device_config,
             loop,
             poll_interval=10,
             config_manager=config_manager,
+            driver=driver,
         )
         
         self._nad_receiver = None
