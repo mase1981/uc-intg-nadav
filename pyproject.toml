@@ -5,7 +5,8 @@ description = "NAD AV integration for Unfolded Circle Remote"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "ucapi-framework>=1.4.0",
+    "ucapi-framework>=1.8.3",
+    "ucapi>=0.5.2",
     "nad-receiver==0.3.0",
 ]
 

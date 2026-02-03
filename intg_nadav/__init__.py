@@ -16,7 +16,7 @@ from intg_nadav.config import NADDeviceConfig
 from intg_nadav.driver import NADDriver
 from intg_nadav.setup_flow import NADSetupFlow
 
-__version__ = "1.0.6"
+__version__ = "1.3.0"
 
 _LOG = logging.getLogger(__name__)
 

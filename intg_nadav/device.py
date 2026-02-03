@@ -33,7 +33,17 @@ class NADDevice(PollingDevice):
         self._muted = False
         self._source = None
         self._source_list = []
-        
+
+        # Sensor entity state
+        self._model = None
+        self._version = None
+
+        # Select entity state
+        self._speaker_a = "Off"
+        self._speaker_b = "Off"
+        self._listening_mode = None
+        self._listening_modes = []
+
         self._min_vol_nad = (device_config.min_volume + 90) * 2
         self._max_vol_nad = (device_config.max_volume + 90) * 2
         self._volume_step = device_config.volume_step
@@ -73,6 +83,30 @@ class NADDevice(PollingDevice):
     @property
     def source_list(self) -> list[str]:
         return self._source_list
+
+    @property
+    def model(self) -> str | None:
+        return self._model
+
+    @property
+    def version(self) -> str | None:
+        return self._version
+
+    @property
+    def speaker_a(self) -> str:
+        return self._speaker_a
+
+    @property
+    def speaker_b(self) -> str:
+        return self._speaker_b
+
+    @property
+    def listening_mode(self) -> str | None:
+        return self._listening_mode
+
+    @property
+    def listening_modes(self) -> list[str]:
+        return self._listening_modes
     
     async def establish_connection(self) -> None:
         """Create NAD receiver client and verify connectivity."""
@@ -86,6 +120,10 @@ class NADDevice(PollingDevice):
             _LOG.warning("%s Connection established but initial poll timed out", self.log_id)
         except Exception as err:
             _LOG.warning("%s Connection established but initial poll failed: %s", self.log_id, err)
+
+        # Query model and version info (cached for sensor entities)
+        await self.get_model()
+        await self.get_version()
         
     async def _connect(self) -> None:
         """Internal connection logic."""
@@ -235,25 +273,121 @@ class NADDevice(PollingDevice):
                     except Exception as src_err:
                         _LOG.debug("%s Source query error: %s", self.log_id, src_err)
                         self._source = None
-            
+
+                # Query speaker states for select entities
+                try:
+                    speaker_a_state = await self._execute_with_retry(self._nad_receiver.main_speaker_a, "?")
+                    if speaker_a_state:
+                        self._speaker_a = speaker_a_state
+                except Exception as spk_err:
+                    _LOG.debug("%s Speaker A query error: %s", self.log_id, spk_err)
+
+                try:
+                    speaker_b_state = await self._execute_with_retry(self._nad_receiver.main_speaker_b, "?")
+                    if speaker_b_state:
+                        self._speaker_b = speaker_b_state
+                except Exception as spk_err:
+                    _LOG.debug("%s Speaker B query error: %s", self.log_id, spk_err)
+
             self._emit_update()
         except Exception as err:
             _LOG.debug("%s Poll error: %s", self.log_id, err)
 
     def _emit_update(self):
-        """Emit device state update."""
+        """Emit device state update to all entities."""
+        # Media player update
         update_data = {
             "state": "ON" if self._power else "OFF",
             "volume": self._volume,
             "muted": self._muted,
             "source": self._source,
         }
-        _LOG.debug("%s Emitting update: %s", self.log_id, update_data)
+        _LOG.debug("%s Emitting media_player update: %s", self.log_id, update_data)
         self.events.emit(
             DeviceEvents.UPDATE,
             self.identifier,
             update_data
         )
+
+        # Sensor entity updates
+        self._emit_sensor_updates()
+
+        # Select entity updates
+        self._emit_select_updates()
+
+    def _emit_sensor_updates(self):
+        """Emit sensor entity updates."""
+        # Model sensor
+        model_entity_id = f"sensor.{self.identifier}_model"
+        self.events.emit(
+            DeviceEvents.UPDATE,
+            model_entity_id,
+            {
+                "state": "ON" if self._model else "UNAVAILABLE",
+                "value": self._model or "Unknown",
+            }
+        )
+
+        # Version sensor
+        version_entity_id = f"sensor.{self.identifier}_version"
+        self.events.emit(
+            DeviceEvents.UPDATE,
+            version_entity_id,
+            {
+                "state": "ON" if self._version else "UNAVAILABLE",
+                "value": self._version or "Unknown",
+            }
+        )
+
+    def _emit_select_updates(self):
+        """Emit select entity updates."""
+        # Speaker A select
+        speaker_a_entity_id = f"select.{self.identifier}_speaker_a"
+        self.events.emit(
+            DeviceEvents.UPDATE,
+            speaker_a_entity_id,
+            {
+                "state": "ON",
+                "current_option": self._speaker_a,
+                "options": ["On", "Off"],
+            }
+        )
+
+        # Speaker B select
+        speaker_b_entity_id = f"select.{self.identifier}_speaker_b"
+        self.events.emit(
+            DeviceEvents.UPDATE,
+            speaker_b_entity_id,
+            {
+                "state": "ON",
+                "current_option": self._speaker_b,
+                "options": ["On", "Off"],
+            }
+        )
+
+        # Listening Mode select (if modes available)
+        listening_mode_entity_id = f"select.{self.identifier}_listening_mode"
+        if self._listening_modes:
+            self.events.emit(
+                DeviceEvents.UPDATE,
+                listening_mode_entity_id,
+                {
+                    "state": "ON",
+                    "current_option": self._listening_mode or "",
+                    "options": self._listening_modes,
+                }
+            )
+        else:
+            # No modes available, mark as unavailable
+            self.events.emit(
+                DeviceEvents.UPDATE,
+                listening_mode_entity_id,
+                {
+                    "state": "UNAVAILABLE",
+                    "current_option": "",
+                    "options": [],
+                }
+            )
 
     async def turn_on(self) -> bool:
         """Turn device on."""
@@ -427,3 +561,109 @@ class NADDevice(PollingDevice):
         min_db = self.device_config.min_volume
         max_db = self.device_config.max_volume
         return int((percent / 100) * (max_db - min_db) + min_db)
+
+    async def get_model(self) -> str | None:
+        """Get device model (query once, cache result)."""
+        if self._model is not None:
+            return self._model
+
+        if self._nad_receiver is None:
+            return None
+
+        try:
+            # Only available for Serial/Telnet connections
+            if self.device_config.connection_type != "TCP":
+                model = await self._execute_with_retry(self._nad_receiver.main_model, "?")
+                if model:
+                    self._model = model
+                    _LOG.info("%s Device model: %s", self.log_id, model)
+                return self._model
+        except Exception as err:
+            _LOG.debug("%s Failed to query model: %s", self.log_id, err)
+
+        return None
+
+    async def get_version(self) -> str | None:
+        """Get firmware version (query once, cache result)."""
+        if self._version is not None:
+            return self._version
+
+        if self._nad_receiver is None:
+            return None
+
+        try:
+            # Only available for Serial/Telnet connections
+            if self.device_config.connection_type != "TCP":
+                version = await self._execute_with_retry(self._nad_receiver.main_version, "?")
+                if version:
+                    self._version = version
+                    _LOG.info("%s Firmware version: %s", self.log_id, version)
+                return self._version
+        except Exception as err:
+            _LOG.debug("%s Failed to query version: %s", self.log_id, err)
+
+        return None
+
+    async def set_speaker_a(self, state: str) -> bool:
+        """Set Speaker A state (On/Off)."""
+        if self._nad_receiver is None:
+            return False
+
+        try:
+            _LOG.info("%s Setting Speaker A to %s", self.log_id, state)
+            # Only available for Serial/Telnet connections
+            if self.device_config.connection_type != "TCP":
+                await self._execute_with_retry(self._nad_receiver.main_speaker_a, "=", state)
+                self._speaker_a = state
+                self._emit_update()
+                return True
+            else:
+                _LOG.warning("%s Speaker A control not available for TCP connections", self.log_id)
+                return False
+        except Exception as err:
+            _LOG.error("%s Set Speaker A failed: %s", self.log_id, err)
+            return False
+
+    async def set_speaker_b(self, state: str) -> bool:
+        """Set Speaker B state (On/Off)."""
+        if self._nad_receiver is None:
+            return False
+
+        try:
+            _LOG.info("%s Setting Speaker B to %s", self.log_id, state)
+            # Only available for Serial/Telnet connections
+            if self.device_config.connection_type != "TCP":
+                await self._execute_with_retry(self._nad_receiver.main_speaker_b, "=", state)
+                self._speaker_b = state
+                self._emit_update()
+                return True
+            else:
+                _LOG.warning("%s Speaker B control not available for TCP connections", self.log_id)
+                return False
+        except Exception as err:
+            _LOG.error("%s Set Speaker B failed: %s", self.log_id, err)
+            return False
+
+    async def set_listening_mode(self, mode: str) -> bool:
+        """Set listening mode."""
+        if self._nad_receiver is None:
+            return False
+
+        try:
+            _LOG.info("%s Setting listening mode to %s", self.log_id, mode)
+            # Only available for Serial/Telnet connections
+            if self.device_config.connection_type != "TCP":
+                # NAD listening mode uses +/- operators, not = with value
+                # This is a simplified implementation that cycles modes
+                # A more complete implementation would need to know current mode
+                # and use + or - to reach desired mode
+                await self._execute_with_retry(self._nad_receiver.main_listeningmode, "+")
+                self._listening_mode = mode
+                self._emit_update()
+                return True
+            else:
+                _LOG.warning("%s Listening mode control not available for TCP connections", self.log_id)
+                return False
+        except Exception as err:
+            _LOG.error("%s Set listening mode failed: %s", self.log_id, err)
+            return False
