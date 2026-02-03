@@ -301,6 +301,7 @@ class NADDevice(PollingDevice):
             "volume": self._volume,
             "muted": self._muted,
             "source": self._source,
+            "source_list": self._source_list,
         }
         _LOG.debug("%s Emitting media_player update: %s", self.log_id, update_data)
         self.events.emit(
