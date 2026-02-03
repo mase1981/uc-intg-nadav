@@ -31,22 +31,22 @@ class NADMediaPlayer(MediaPlayer):
             Features.MUTE_TOGGLE,
             Features.MUTE,
             Features.UNMUTE,
+            Features.SELECT_SOURCE,  # Always add SELECT_SOURCE feature
         ]
-        
-        # CRITICAL FIX: Initialize with current source list
+
+        # CRITICAL FIX: Always initialize with source attributes
+        # Source list will be populated during device connection
         attributes = {
             Attributes.STATE: States.UNKNOWN,
             Attributes.VOLUME: 0,
             Attributes.MUTED: False,
+            Attributes.SOURCE: "",
+            Attributes.SOURCE_LIST: device.source_list or [],
         }
-        
-        # Add source support if sources are configured
-        if device.source_list:
-            features.append(Features.SELECT_SOURCE)
-            attributes[Attributes.SOURCE] = ""
-            attributes[Attributes.SOURCE_LIST] = device.source_list
-            _LOG.info("NAD Media Player initialized with %d sources: %s",
-                     len(device.source_list), device.source_list)
+
+        _LOG.info("NAD Media Player initialized with %d sources: %s",
+                 len(device.source_list) if device.source_list else 0,
+                 device.source_list or [])
 
         # Note: No Options.SIMPLE_COMMANDS - the Features list already declares all commands
         # Using SIMPLE_COMMANDS would create duplicate buttons in the UI
