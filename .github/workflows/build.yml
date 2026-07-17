@@ -49,8 +49,23 @@ jobs:
                 --collect-all zeroconf \
                 --collect-all ucapi \
                 --collect-all ucapi_framework \
-                --hidden-import=nad_receiver \
-                --hidden-import=serial \
+                --collect-all aiohttp \
+                --collect-all yarl \
+                --collect-all multidict \
+                --collect-all frozenlist \
+                --collect-all aiosignal \
+                --hidden-import nad_receiver \
+                --hidden-import serial \
+                --hidden-import intg_${INTG_NAME}.driver \
+                --hidden-import intg_${INTG_NAME}.device \
+                --hidden-import intg_${INTG_NAME}.config \
+                --hidden-import intg_${INTG_NAME}.client_bluos \
+                --hidden-import intg_${INTG_NAME}.client_classic \
+                --hidden-import intg_${INTG_NAME}.media_player \
+                --hidden-import intg_${INTG_NAME}.browser \
+                --hidden-import intg_${INTG_NAME}.select \
+                --hidden-import intg_${INTG_NAME}.sensor \
+                --hidden-import intg_${INTG_NAME}.setup_flow \
                 --paths . \
                 intg_${INTG_NAME}/__init__.py"
 
@@ -112,6 +127,8 @@ jobs:
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: false
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -129,6 +146,8 @@ jobs:
     steps:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
+        with:
+          pattern: uc-intg-*
 
       - name: Extract build archives from downloaded files
         run: |

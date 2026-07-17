@@ -17,7 +17,7 @@ ENV UC_CONFIG_HOME="/config"
 ENV PYTHONPATH=/app
 
 LABEL org.opencontainers.image.source=https://github.com/mase1981/uc-intg-nadav
-LABEL org.opencontainers.image.description="Anthem A/V Receivers integration for Unfolded Circle Remote"
+LABEL org.opencontainers.image.description="NAD A/V Receivers & Amplifiers integration for Unfolded Circle Remote"
 LABEL org.opencontainers.image.licenses=MPL-2.0
 
-CMD ["python3", "-u", "-m", "uc_intg_nadav"]
+CMD ["python3", "-u", "-m", "intg_nadav"]

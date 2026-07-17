@@ -1,6 +1,6 @@
 # NAD A/V Receivers & Amplifiers Integration for Unfolded Circle Remote 2/3
 
-Control your NAD A/V receivers and amplifiers (digital amplifiers, classic receivers, and integrated amps) directly from your Unfolded Circle Remote 2 or Remote 3 with comprehensive media player control, **multiple connection types** (TCP/Telnet), **source switching**, and **full volume control**.
+Control your NAD audio gear directly from your Unfolded Circle Remote 2 or Remote 3 — from **BluOS streaming amplifiers** (M10, M33, C700, C658) to classic **T-Series AVRs**, **D-Series digital amps**, and **RS-232** models. One integration, four connection types, with volume, source/input switching, transport control, now-playing metadata, and media browsing.
 
 ![NAD](https://img.shields.io/badge/NAD-A%2FV%20Receivers-blue)
 [![GitHub Release](https://img.shields.io/github/v/release/mase1981/uc-intg-nadav?style=flat-square)](https://github.com/mase1981/uc-intg-nadav/releases)
@@ -13,12 +13,8 @@ Control your NAD A/V receivers and amplifiers (digital amplifiers, classic recei
 [![PayPal](https://img.shields.io/badge/PayPal-donate-blue.svg?style=flat-square)](https://paypal.me/mmiyara)
 [![Github Sponsors](https://img.shields.io/badge/GitHub%20Sponsors-30363D?&logo=GitHub-Sponsors&logoColor=EA4AAA&style=flat-square)](https://github.com/sponsors/mase1981)
 
-
-## Features
-
-This integration provides comprehensive control of NAD A/V receivers and amplifiers through multiple connection protocols (TCP, Telnet), delivering seamless integration with your Unfolded Circle Remote for complete home theater control.
-
 ---
+
 ## ❤️ Support Development ❤️
 
 If you find this integration useful, consider supporting development:
@@ -28,105 +24,74 @@ If you find this integration useful, consider supporting development:
 [![PayPal](https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/mmiyara)
 
 Your support helps maintain this integration. Thank you! ❤️
+
 ---
 
-### 🎵 **Media Player Control**
+## What's New in 2.0
 
-#### **Power Management**
-- **Power On/Off** - Complete power control
-- **Power Toggle** - Quick power state switching
-- **State Feedback** - Real-time power state monitoring
+- 🆕 **BluOS streaming support** — NAD M10, M33, C700, C658 and other BluOS models are now controllable over the network (port 11000), including a working volume slider, transport controls, now-playing metadata with album art, physical input selection, and a media browser.
+- 🆕 **Media browser** for BluOS models — browse and play **Inputs**, **Presets**, and the current **Queue**.
+- 🆕 **Select entities** — source/input, preset and repeat (BluOS); speaker A / speaker B (classic).
+- 🆕 **Sensor entities** — model, current source, connection status, and firmware version (classic).
+- ✅ **Fixed setup for BluOS devices** — previously an M10/M33 could not be set up because it does not speak the classic NAD Telnet protocol.
+- ✅ **Reliable entity control** — corrected device identifiers so entities register and respond in activities (volume slider now selectable).
+- ⬆️ Rebuilt on `ucapi-framework 1.9.5` / `ucapi 0.7.0`.
 
-#### **Volume Control**
-- **Volume Up/Down** - Precise volume adjustment (configurable step size)
-- **Set Volume** - Direct volume control (-92dB to -20dB by default)
-- **Volume Slider** - Visual volume control (0-100 scale)
-- **Mute Toggle** - Quick mute/unmute
-- **Unmute** - Explicit unmute control
-- **Configurable Range** - Customize min/max volume and step size
+> **Upgrading from 1.x?** Existing Telnet / TCP / RS-232 devices are migrated automatically on first start — no need to remove and re-add them. You may need to re-add entities to your activities.
 
-#### **Source Selection**
-Control all available input sources:
-- **Source 1-12** - All standard NAD inputs
-- **Disc** - CD/DVD player input
-- **Video 1-3** - Video inputs
-- **Tape 1-2** - Tape deck inputs
-- **Tuner** - AM/FM tuner
-- **Aux** - Auxiliary input
+---
 
-### 🔌 **Flexible Connection Options**
+## Supported Devices & Connection Types
 
-#### **TCP Connection** (Digital Amplifiers)
-- **Port**: 53 (default for NAD digital amps)
-- **Protocol**: NAD TCP protocol
-- **Use Case**: Modern NAD digital amplifiers with network control
-- **Stability**: Most reliable, recommended when available
+| Connection | Default Port | Typical Models | Protocol |
+|---|---|---|---|
+| **BluOS / Streaming** | 11000 | M10 (v1/v2), M33, C700, C658, C399 (with BluOS) and other BluOS players | BluOS Custom Integration API (HTTP) |
+| **Telnet** | 23 | Classic T-Series AVRs (T748, T758, T778, T787…) | NAD Telnet (`Main.*` commands) |
+| **TCP** | 53 | D-Series digital amps (e.g. D 7050) | NAD TCP |
+| **RS-232** | serial | Any NAD model with a DB9 serial port | NAD RS-232 |
 
-#### **Telnet Connection** (Network Receivers)
-- **Port**: Configurable (default 53)
-- **Protocol**: Telnet with NAD commands
-- **Use Case**: NAD receivers with Telnet support
-- **Flexibility**: Works with various NAD models
+> **Not sure which one?** If your unit runs the **BluOS** app (streaming, multi-room), choose **BluOS**. If it's a classic **T-Series** receiver, choose **Telnet**. The setup screen has an auto-port option so you don't need to remember port numbers.
 
+---
 
-### 🎛️ **Multi-Device Support**
+## Features by Connection Type
 
-- **Multiple Receivers** - Control unlimited NAD devices
-- **Mixed Connections** - Use TCP, Telnet simultaneously
-- **Individual Configuration** - Each device with independent settings
-- **Manual Configuration** - Direct connection setup per device
+### 🎵 BluOS / Streaming (M10, M33, C700, C658 …)
 
-### **Supported Models**
+- **Media player** — power (play/standby), volume slider (0–100), mute, play/pause, stop, next/previous, seek, shuffle, repeat.
+- **Now playing** — title, artist, album, and album art on the Remote.
+- **Input selection** — switch between physical inputs (HDMI eARC, Optical, Coaxial, Analog, Phono, Bluetooth) discovered live from the device.
+- **Media browser** — browse and play **Inputs**, **Presets**, and the current **Queue**.
+- **Select entities** — Source (inputs), Preset, Repeat mode.
+- **Sensors** — Model, Current Source, Connection status.
 
-#### **Digital Amplifiers** (TCP Recommended)
-- **D Series** - Digital integrated amplifiers with network control
-- **M Series** - Master series amplifiers with IP control
-- **C Series** - Classic series with network capability
+### 🎛️ Classic T-Series / D-Series / RS-232
 
-#### **Classic Receivers** (Telnet)
-- **C Series** - Classic integrated amplifiers
+- **Media player** — power on/off/toggle, volume slider (configurable dB range), volume up/down, mute/unmute, source selection.
+- **Select entities** — Source, Speaker A, Speaker B.
+- **Sensors** — Model, Firmware Version, Current Source, Connection status.
 
-#### **Integrated Amplifiers**
-- All NAD integrated amps with network control support
+### 🎚️ General
 
-### **Connection Requirements**
+- **Multiple devices** — control any number of NAD units, mixing BluOS and classic connections.
+- **Independent configuration** — each device is set up and stored separately.
+- **Reboot & standby survival** — devices reconnect automatically after Remote or device restarts.
 
-#### **TCP Connection**
-- **Protocol**: NAD TCP Text-Based Control
-- **Port**: 53 (default)
-- **Network**: Device must be on same local network
-- **Models**: NAD digital amplifiers with network support
-
-#### **Telnet Connection**
-- **Protocol**: Telnet with NAD commands
-- **Port**: Configurable (typically 53 or 23)
-- **Network**: Device must be on same local network
-- **Models**: NAD receivers with Telnet control
-
-
-### **Network Requirements** (TCP/Telnet Only)
-
-- **Local Network Access** - Integration requires same network as NAD device
-- **TCP Protocol** - Firewall must allow TCP traffic on configured port
-- **Static IP Recommended** - Device should have static IP or DHCP reservation
-- **IP Control Enabled** - Enable network control in device settings (if applicable)
+---
 
 ## Installation
 
 ### Option 1: Remote Web Interface (Recommended)
-1. Navigate to the [**Releases**](https://github.com/mase1981/uc-intg-nadav/releases) page
-2. Download the latest `uc-intg-nadav-<version>-aarch64.tar.gz` file
-3. Open your remote's web interface (`http://your-remote-ip`)
-4. Go to **Settings** → **Integrations** → **Add Integration**
-5. Click **Upload** and select the downloaded `.tar.gz` file
+1. Go to the [**Releases**](https://github.com/mase1981/uc-intg-nadav/releases) page.
+2. Download the latest `uc-intg-nadav-<version>-aarch64.tar.gz`.
+3. Open your Remote's web interface (`http://your-remote-ip`).
+4. Go to **Settings → Integrations → Add Integration → Install Custom**.
+5. Upload the downloaded `.tar.gz` and follow the setup.
 
-### Option 2: Docker (Advanced Users)
-
-The integration is available as a pre-built Docker image from GitHub Container Registry:
+### Option 2: Docker (Advanced)
 
 **Image**: `ghcr.io/mase1981/uc-intg-nadav:latest`
 
-**Docker Compose:**
 ```yaml
 services:
   uc-intg-nadav:
@@ -134,137 +99,80 @@ services:
     container_name: uc-intg-nadav
     network_mode: host
     volumes:
-      - </local/path>:/data
+      - ./data:/data
     environment:
       - UC_CONFIG_HOME=/data
       - UC_INTEGRATION_HTTP_PORT=9090
       - UC_INTEGRATION_INTERFACE=0.0.0.0
-      - PYTHONPATH=/app
     restart: unless-stopped
 ```
 
-**Docker Run:**
-```bash
-docker run -d --name uc-nadav --restart unless-stopped --network host -v nadav-config:/app/config -e UC_CONFIG_HOME=/app/config -e UC_INTEGRATION_INTERFACE=0.0.0.0 -e UC_INTEGRATION_HTTP_PORT=9090 -e PYTHONPATH=/app ghcr.io/mase1981/uc-intg-nadav:latest
-```
+---
 
 ## Configuration
 
-### Step 1: Prepare Your NAD Device
+### Step 1 — Prepare your device
+- Power the device on and connect it to your network (Ethernet recommended for classic models).
+- Give it a **static IP** or DHCP reservation.
+- Note its **IP address**.
+- For **BluOS** models, confirm the unit shows up in the BluOS app.
 
-**IMPORTANT**: NAD device must be powered on and properly connected before adding the integration.
+### Step 2 — Add the integration
+1. Go to **Settings → Integrations** and start the NAD setup.
+2. Fill in the form:
+   - **Device Name** — e.g. "Living Room M10".
+   - **Connection Type** — choose **Telnet**, **BluOS / Streaming**, **TCP**, or **RS-232**.
+   - **IP Address** — the device IP (network models).
+   - **Port** — leave at **0** to auto-select the right port (BluOS 11000 / Telnet 23 / TCP 53), or enter a custom port.
+   - **Serial Port** — only for RS-232 (e.g. `/dev/ttyUSB0`).
+3. For **Telnet / RS-232**, a second screen lets you name your input **Sources** (Source 1–12). BluOS and TCP discover sources automatically.
+4. The integration tests the connection and creates the entities.
 
-#### For TCP/Telnet Connection:
-1. Check that device is connected to network (Ethernet recommended)
-2. Note the IP address from device's network settings
-3. Ensure network control is enabled (if applicable)
-4. Verify firmware is up to date
+### Entities created
+Entity IDs follow `{type}.nad_{host}_{port}.{sub}`, for example:
+- `media_player.nad_192_168_1_50_11000`
+- `select.nad_192_168_1_50_11000.source`
+- `sensor.nad_192_168_1_50_11000.model`
 
-#### Network Setup (TCP/Telnet):
-- **Wired Connection**: Recommended for stability
-- **Static IP**: Recommended via DHCP reservation
-- **Firewall**: Allow TCP on configured port (default 53)
-- **Network Isolation**: Must be on same subnet as Remote
+Add the media player (and any selects/sensors you want) to your activities and profiles.
 
-### Step 2: Setup Integration
+---
 
-1. After installation, go to **Settings** → **Integrations**
-2. The NAD integration should appear in **Available Integrations**
-3. Click **"Configure"** and enter device details:
+## Volume Notes
 
-#### **Configuration Fields:**
+- **BluOS** models report and accept volume as **0–100%** natively — the slider maps 1:1.
+- **Classic** models use a **dB range** (default **-92 dB** to **-20 dB**, step **4 dB**), presented on the Remote as **0–100%**:
 
-   - **Device Name**: Friendly name (e.g., "Living Room NAD")
-   - **Connection Type**: Select from dropdown:
-     - **TCP** (Digital Amplifiers) - Port 53, most stable
-     - **Telnet** - Custom port, flexible
-   
-   **For TCP/Telnet:**
-   - **IP Address**: Enter device IP (e.g., 192.168.1.100)
-   - **Port**: Default 53 (change only if needed)
-   
-   **Volume Settings (Optional):**
-   - **Min Volume**: Minimum volume in dB (default: -92)
-   - **Max Volume**: Maximum volume in dB (default: -20)
-   - **Volume Step**: Volume adjustment step size (default: 4)
-   
-   - Click **Complete Setup**
-   
-   **Connection Test:**
-   - Integration verifies device connectivity
-   - Sends test command to confirm communication
-   - Setup fails if device unreachable
+  | Remote Slider | NAD Volume |
+  |---|---|
+  | 0% | -92 dB (min) |
+  | 50% | -56 dB |
+  | 100% | -20 dB (max) |
 
-3. Integration will create **media player entity**:
-   - Entity ID: `media_player.nad_[device_name]`
-   - Example: `media_player.nad_living_room`
+---
 
-## Using the Integration
+## Troubleshooting
 
-### Media Player Entity
+| Symptom | Cause / Fix |
+|---|---|
+| **M10 / M33 / BluOS unit "Connection refused"** | These are BluOS models — choose **BluOS / Streaming**, not Telnet. They do not respond on port 23. |
+| **No volume slider in an activity** | Make sure the **media player** entity (not just a button) is added to the activity; the media player exposes the numeric volume feature. |
+| **Setup fails immediately** | Verify the IP is correct and the device is powered on and on the same subnet. Leave **Port = 0** to auto-select. |
+| **Sources empty (classic)** | Re-run setup and enter names for the inputs you use on the Sources screen. |
+| **Inputs empty (BluOS)** | Inputs are read from the device at runtime; ensure the unit is reachable and try reloading the integration. |
 
-Each NAD device's media player entity provides complete control:
-
-- **Power Control**: On/Off/Toggle with state feedback
-- **Volume Control**: Volume slider (configurable range, default -92dB to -20dB)
-- **Volume Buttons**: Up/Down with configurable step size
-- **Mute Control**: Toggle, Mute, Unmute
-- **Source Selection**: Dropdown with all available NAD inputs
-- **State Display**: Current power, volume, source, and mute status
-
-### Available Sources
-
-| Source Name | NAD Code | Description |
-|------------|----------|-------------|
-| Source 1-12 | 1-12 | Standard NAD inputs |
-| Disc | disc | CD/DVD player |
-| Video 1-3 | video1-3 | Video inputs |
-| Tape 1-2 | tape1-2 | Tape deck inputs |
-| Tuner | tuner | AM/FM tuner |
-| Aux | aux | Auxiliary input |
-
-*Note: Available sources may vary by model. Integration shows only sources supported by your device.*
-
-### Volume Control Details
-
-**Default Volume Range:**
-- **Minimum**: -92dB (very quiet)
-- **Maximum**: -20dB (reference level)
-- **Step Size**: 4dB (adjustable)
-
-**Remote Interface:**
-- Volume displayed as 0-100 percentage
-- Automatic conversion between dB and percentage
-- Configurable during setup for your listening preferences
-
-**Example Conversions:**
-```
-Remote Slider → NAD Volume
-0%  → -92dB (minimum)
-25% → -74dB
-50% → -56dB
-75% → -38dB
-100% → -20dB (maximum)
-```
-
-### Multiple Device Control
-
-- **Independent Control**: Each NAD device operates independently
-- **Mixed Connections**: Control TCP, Telnet, and RS-232 devices simultaneously
-- **Separate Entities**: Each device gets its own media player entity
-- **Configuration Management**: Add/update/remove devices individually
-
+---
 
 ## Credits
 
 - **Developer**: Meir Miyara
-- **NAD**: High-quality audio amplifiers and receivers
-- **Unfolded Circle**: Remote 2/3 integration framework (ucapi)
-- **Community**: Testing and feedback from UC community
+- **Unfolded Circle**: Remote 2/3 integration framework (ucapi / ucapi-framework)
+- **BluOS**: BluOS Custom Integration API
+- **Community**: Testing and feedback from the UC community
 
 ## License
 
-This project is licensed under the Mozilla Public License 2.0 (MPL-2.0) - see LICENSE file for details.
+Mozilla Public License 2.0 (MPL-2.0) — see the LICENSE file.
 
 ## Support & Community
 
@@ -275,6 +183,4 @@ This project is licensed under the Mozilla Public License 2.0 (MPL-2.0) - see LI
 
 ---
 
-**Made with ❤️ for the Unfolded Circle and NAD Communities**
-
-**Thank You**: Meir Miyara
+**Made with ❤️ for the Unfolded Circle and NAD Communities** — Meir Miyara

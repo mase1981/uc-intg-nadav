@@ -5,39 +5,45 @@ NAD AV driver for Unfolded Circle integration.
 :license: MPL-2.0, see LICENSE for more details.
 """
 
-import asyncio
 import logging
-import ucapi
-from ucapi_framework import BaseIntegrationDriver, get_config_path
-from intg_nadav.config import NADDeviceConfig, NADConfigManager
+
+from ucapi_framework import BaseIntegrationDriver
+
+from intg_nadav.config import NADDeviceConfig
 from intg_nadav.device import NADDevice
 from intg_nadav.media_player import NADMediaPlayer
-from intg_nadav.sensor import NADModelSensor, NADVersionSensor
-from intg_nadav.select import NADSpeakerASelect, NADSpeakerBSelect, NADListeningModeSelect
-from intg_nadav.setup_flow import NADSetupFlow
+from intg_nadav.select import (
+    NADPresetSelect,
+    NADRepeatSelect,
+    NADSourceSelect,
+    NADSpeakerASelect,
+    NADSpeakerBSelect,
+)
+from intg_nadav.sensor import (
+    NADConnectionSensor,
+    NADModelSensor,
+    NADSourceSensor,
+    NADVersionSensor,
+)
 
 _LOG = logging.getLogger(__name__)
 
 
 class NADDriver(BaseIntegrationDriver[NADDevice, NADDeviceConfig]):
     """NAD AV integration driver."""
-    
-    def __init__(self, loop: asyncio.AbstractEventLoop):
-        """Initialize NAD driver."""
+
+    def __init__(self) -> None:
         super().__init__(
-            loop=loop,
             device_class=NADDevice,
             entity_classes=[
                 NADMediaPlayer,
-                lambda cfg, dev: [
-                    NADModelSensor(cfg, dev),
-                    NADVersionSensor(cfg, dev),
-                ],
-                lambda cfg, dev: [
-                    NADSpeakerASelect(cfg, dev),
-                    NADSpeakerBSelect(cfg, dev),
-                    NADListeningModeSelect(cfg, dev),
-                ],
+                NADSourceSelect,
+                NADModelSensor,
+                NADSourceSensor,
+                NADConnectionSensor,
+                lambda cfg, dev: [NADVersionSensor(cfg, dev)] if not cfg.is_bluos else [],
+                lambda cfg, dev: [NADPresetSelect(cfg, dev), NADRepeatSelect(cfg, dev)] if cfg.is_bluos else [],
+                lambda cfg, dev: [NADSpeakerASelect(cfg, dev), NADSpeakerBSelect(cfg, dev)] if not cfg.is_bluos else [],
             ],
             driver_id="nadav",
         )

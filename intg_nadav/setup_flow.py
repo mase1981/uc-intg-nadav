@@ -1,228 +1,57 @@
 """
-NAD AV setup flow for Unfolded Circle integration.
+NAD setup flow for Unfolded Circle integration.
 
 :copyright: (c) 2025 by Meir Miyara.
 :license: MPL-2.0, see LICENSE for more details.
 """
 
+from __future__ import annotations
+
+import asyncio
 import logging
+import os
 from typing import Any
-from ucapi import RequestUserInput, IntegrationSetupError, SetupError
+
+import aiohttp
+from ucapi import IntegrationSetupError, RequestUserInput, SetupError
 from ucapi_framework import BaseSetupFlow
-from intg_nadav.config import NADDeviceConfig
+
+from intg_nadav.config import (
+    CONNECTION_BLUOS,
+    CONNECTION_RS232,
+    CONNECTION_TCP,
+    CONNECTION_TELNET,
+    DEFAULT_PORTS,
+    NADDeviceConfig,
+    sanitize_identifier,
+)
 
 _LOG = logging.getLogger(__name__)
 
 
 class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
-    """Setup flow for NAD integration."""
-    
-    def __init__(self, *args, **kwargs):
-        """Initialize setup flow."""
+    """Setup flow for the NAD integration."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self._device_info = {}
-    
-    async def query_device(self, input_values: dict[str, Any]) -> NADDeviceConfig | SetupError | RequestUserInput:
-        """Create device config from user input."""
-        # First screen - basic device info
-        if "name" in input_values and "source_1" not in input_values:
-            name = input_values.get("name", "").strip()
-            connection_type = input_values.get("connection_type", "Telnet")
-            host = input_values.get("host", "").strip()
-            port = int(input_values.get("port", 23))
-            serial_port = input_values.get("serial_port", "/dev/ttyUSB0").strip()
+        self._device_info: dict[str, Any] = {}
 
-            if connection_type in ("TCP", "Telnet"):
-                if not host:
-                    _LOG.warning("Host required for Network connection")
-                    return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
-
-                identifier = f"{host}_{port}"
-
-                # Test network connectivity
-                _LOG.info("Testing connectivity to %s:%d...", host, port)
-                if not await self._test_network_connection(host, port, connection_type):
-                    _LOG.error("Failed to connect to %s:%d", host, port)
-                    return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
-
-            else:
-                if not serial_port:
-                    _LOG.warning("Serial port required for RS232 connection")
-                    return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
-
-                identifier = serial_port.replace("/", "_").replace("\\", "_")
-
-                # Test serial port accessibility
-                _LOG.info("Testing serial port %s...", serial_port)
-                if not await self._test_serial_connection(serial_port):
-                    _LOG.error("Cannot access serial port %s", serial_port)
-                    return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
-            
-            # Store device info for next screen
-            self._device_info = {
-                "identifier": identifier,
-                "name": name or f"NAD {connection_type}",
-                "connection_type": connection_type,
-                "host": host,
-                "port": port,
-                "serial_port": serial_port,
-            }
-            
-            # For TCP connections, sources are auto-discovered, skip source configuration
-            if connection_type == "TCP":
-                _LOG.info("Creating NAD TCP device config: %s", name)
-                return NADDeviceConfig(
-                    identifier=identifier,
-                    name=name or f"NAD {connection_type}",
-                    connection_type=connection_type,
-                    host=host,
-                    port=port,
-                    serial_port=serial_port,
-                    min_volume=-92,
-                    max_volume=-20,
-                    volume_step=4,
-                    sources=None,  # Auto-discovered for TCP
-                )
-            
-            # For Telnet/RS232, show source configuration screen
-            return await self.get_source_configuration_screen()
-        
-        # Second screen - source configuration (only for Telnet/RS232)
-        elif "source_1" in input_values:
-            # Build source mapping from user input
-            source_map = {}
-            
-            for i in range(1, 13):  # Sources 1-12
-                source_name = input_values.get(f"source_{i}", "").strip()
-                if source_name:  # Only add non-empty sources
-                    source_map[i] = source_name
-            
-            if not source_map:
-                _LOG.warning("No sources configured")
-                return SetupError(error_type=IntegrationSetupError.OTHER)
-            
-            _LOG.info("Creating NAD device config: %s with %d sources: %s", 
-                     self._device_info["name"], len(source_map), source_map)
-            
-            return NADDeviceConfig(
-                identifier=self._device_info["identifier"],
-                name=self._device_info["name"],
-                connection_type=self._device_info["connection_type"],
-                host=self._device_info.get("host"),
-                port=self._device_info.get("port", 23),
-                serial_port=self._device_info.get("serial_port", "/dev/ttyUSB0"),
-                min_volume=-92,
-                max_volume=-20,
-                volume_step=4,
-                sources=source_map,
-            )
-        
-        return SetupError(error_type=IntegrationSetupError.OTHER)
-    
-    async def get_source_configuration_screen(self) -> RequestUserInput:
-        """Get source configuration screen for Telnet/RS232 connections."""
-        return RequestUserInput(
-            {"en": "Configure Input Sources"},
-            [
-                {
-                    "id": "info",
-                    "label": {"en": "📺 Input Source Names"},
-                    "field": {
-                        "label": {
-                            "value": {
-                                "en": (
-                                    "Enter friendly names for the source inputs you use.\n\n"
-                                    "Example: Source 1 = 'Apple TV', Source 2 = 'Fire TV', etc.\n\n"
-                                    "Leave unused sources blank. You only need to configure the sources you actually use."
-                                )
-                            }
-                        }
-                    },
-                },
-                {
-                    "id": "source_1",
-                    "label": {"en": "Source 1"},
-                    "field": {"text": {"value": ""}},
-                },
-                {
-                    "id": "source_2",
-                    "label": {"en": "Source 2"},
-                    "field": {"text": {"value": ""}},
-                },
-                {
-                    "id": "source_3",
-                    "label": {"en": "Source 3"},
-                    "field": {"text": {"value": ""}},
-                },
-                {
-                    "id": "source_4",
-                    "label": {"en": "Source 4"},
-                    "field": {"text": {"value": ""}},
-                },
-                {
-                    "id": "source_5",
-                    "label": {"en": "Source 5"},
-                    "field": {"text": {"value": ""}},
-                },
-                {
-                    "id": "source_6",
-                    "label": {"en": "Source 6"},
-                    "field": {"text": {"value": ""}},
-                },
-                {
-                    "id": "source_7",
-                    "label": {"en": "Source 7"},
-                    "field": {"text": {"value": ""}},
-                },
-                {
-                    "id": "source_8",
-                    "label": {"en": "Source 8"},
-                    "field": {"text": {"value": ""}},
-                },
-                {
-                    "id": "source_9",
-                    "label": {"en": "Source 9 (Optional)"},
-                    "field": {"text": {"value": ""}},
-                },
-                {
-                    "id": "source_10",
-                    "label": {"en": "Source 10 (Optional)"},
-                    "field": {"text": {"value": ""}},
-                },
-                {
-                    "id": "source_11",
-                    "label": {"en": "Source 11 (Optional)"},
-                    "field": {"text": {"value": ""}},
-                },
-                {
-                    "id": "source_12",
-                    "label": {"en": "Source 12 (Optional)"},
-                    "field": {"text": {"value": ""}},
-                },
-            ]
-        )
-    
     def get_manual_entry_form(self) -> RequestUserInput:
-        """Define manual entry fields with user instructions."""
         return RequestUserInput(
             {"en": "Configure NAD Device"},
             [
                 {
                     "id": "info",
-                    "label": {"en": "⚠️ IMPORTANT - Before Setup"},
-                    "field": {
-                        "label": {
-                            "value": {
-                                "en": (
-                                    "Please ensure your NAD device is:\n"
-                                    "• Powered ON\n"
-                                    "• Connected to your network (for TCP/Telnet)\n"
-                                    "• Has a static IP or DHCP reservation\n\n"
-                                    "The integration will connect when you press 'Next'."
-                                )
-                            }
-                        }
-                    },
+                    "label": {"en": "Before you begin"},
+                    "field": {"label": {"value": {"en": (
+                        "Ensure the device is powered on and reachable on your network "
+                        "(use a static IP or DHCP reservation).\n\n"
+                        "• BluOS / Streaming: M10, M33, C700, C658 and other BluOS models "
+                        "(default port 11000).\n"
+                        "• Telnet: classic T-Series AVRs (default port 23).\n"
+                        "• TCP: D-Series digital amps (default port 53).\n"
+                        "• RS-232: serial connection."
+                    )}}},
                 },
                 {
                     "id": "name",
@@ -232,107 +61,191 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
                 {
                     "id": "connection_type",
                     "label": {"en": "Connection Type"},
-                    "field": {
-                        "dropdown": {
-                            "value": "Telnet",
-                            "items": [
-                                {"id": "Telnet", "label": {"en": "Telnet (T-Series AVR - Port 23)"}},
-                                {"id": "TCP", "label": {"en": "TCP (D-Series Digital Amp - Port 53)"}},
-                                {"id": "RS232", "label": {"en": "RS-232 Serial"}},
-                            ],
-                        }
-                    },
+                    "field": {"dropdown": {
+                        "value": CONNECTION_TELNET,
+                        "items": [
+                            {"id": CONNECTION_TELNET, "label": {"en": "Telnet (T-Series AVR - Port 23)"}},
+                            {"id": CONNECTION_BLUOS, "label": {"en": "BluOS / Streaming (M10, M33, C700, C658)"}},
+                            {"id": CONNECTION_TCP, "label": {"en": "TCP (D-Series Digital Amp - Port 53)"}},
+                            {"id": CONNECTION_RS232, "label": {"en": "RS-232 Serial"}},
+                        ],
+                    }},
                 },
                 {
                     "id": "host",
-                    "label": {"en": "IP Address (for TCP/Telnet)"},
-                    "field": {"text": {"value": "192.168.1.100"}},
+                    "label": {"en": "IP Address (network models)"},
+                    "field": {"text": {"value": ""}},
                 },
                 {
                     "id": "port",
-                    "label": {"en": "Port (Default: 23 for Telnet, 53 for TCP)"},
-                    "field": {"number": {"value": 23, "min": 1, "max": 65535}},
+                    "label": {"en": "Port (0 = auto: BluOS 11000, Telnet 23, TCP 53)"},
+                    "field": {"number": {"value": 0, "min": 0, "max": 65535}},
                 },
                 {
                     "id": "serial_port",
-                    "label": {"en": "Serial Port (RS232 only)"},
+                    "label": {"en": "Serial Port (RS-232 only)"},
                     "field": {"text": {"value": "/dev/ttyUSB0"}},
                 },
-            ]
+            ],
         )
-    
+
+    async def query_device(
+        self, input_values: dict[str, Any]
+    ) -> NADDeviceConfig | SetupError | RequestUserInput:
+        # Second screen: source configuration (classic Telnet/RS232 only)
+        if "source_1" in input_values:
+            return self._build_classic_with_sources(input_values)
+
+        name = input_values.get("name", "").strip()
+        connection_type = input_values.get("connection_type", CONNECTION_TELNET)
+        host = input_values.get("host", "").strip()
+        serial_port = input_values.get("serial_port", "/dev/ttyUSB0").strip()
+        port = self._resolve_port(input_values.get("port", 0), connection_type)
+
+        if connection_type == CONNECTION_RS232:
+            if not serial_port:
+                return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
+            identifier = f"nad_{sanitize_identifier(serial_port)}"
+            _LOG.info("Testing serial port %s...", serial_port)
+            if not await self._test_serial(serial_port):
+                return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
+        else:
+            if not host:
+                return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
+            identifier = f"nad_{sanitize_identifier(host)}_{port}"
+            _LOG.info("Testing %s connectivity to %s:%d...", connection_type, host, port)
+            if not await self._test_connection(connection_type, host, port):
+                _LOG.error("Failed to connect to %s:%d (%s)", host, port, connection_type)
+                return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
+
+        display_name = name or f"NAD {connection_type}"
+
+        # BluOS and TCP auto-discover sources -> finish setup immediately.
+        if connection_type in (CONNECTION_BLUOS, CONNECTION_TCP):
+            _LOG.info("Creating NAD %s device config: %s", connection_type, display_name)
+            return NADDeviceConfig(
+                identifier=identifier,
+                name=display_name,
+                connection_type=connection_type,
+                host=host or None,
+                port=port,
+                serial_port=serial_port,
+            )
+
+        # Telnet / RS232 -> ask for source names.
+        self._device_info = {
+            "identifier": identifier,
+            "name": display_name,
+            "connection_type": connection_type,
+            "host": host or None,
+            "port": port,
+            "serial_port": serial_port,
+        }
+        return self._source_configuration_screen()
+
+    def _resolve_port(self, raw: Any, connection_type: str) -> int:
+        try:
+            port = int(raw)
+        except (ValueError, TypeError):
+            port = 0
+        if port <= 0:
+            return DEFAULT_PORTS.get(connection_type, 0)
+        return port
+
+    def _build_classic_with_sources(self, input_values: dict[str, Any]) -> NADDeviceConfig | SetupError:
+        source_map: dict[int, str] = {}
+        for i in range(1, 13):
+            name = input_values.get(f"source_{i}", "").strip()
+            if name:
+                source_map[i] = name
+        if not source_map:
+            _LOG.warning("No sources configured")
+            return SetupError(error_type=IntegrationSetupError.OTHER)
+
+        info = self._device_info
+        _LOG.info("Creating NAD %s config with %d sources", info["connection_type"], len(source_map))
+        return NADDeviceConfig(
+            identifier=info["identifier"],
+            name=info["name"],
+            connection_type=info["connection_type"],
+            host=info.get("host"),
+            port=info.get("port", DEFAULT_PORTS[CONNECTION_TELNET]),
+            serial_port=info.get("serial_port", "/dev/ttyUSB0"),
+            sources=source_map,
+        )
+
+    def _source_configuration_screen(self) -> RequestUserInput:
+        fields = [{
+            "id": "info",
+            "label": {"en": "Input Source Names"},
+            "field": {"label": {"value": {"en": (
+                "Enter friendly names for the inputs you use (e.g. Source 1 = 'Apple TV'). "
+                "Leave unused sources blank."
+            )}}},
+        }]
+        for i in range(1, 13):
+            suffix = " (Optional)" if i > 8 else ""
+            fields.append({
+                "id": f"source_{i}",
+                "label": {"en": f"Source {i}{suffix}"},
+                "field": {"text": {"value": ""}},
+            })
+        return RequestUserInput({"en": "Configure Input Sources"}, fields)
+
     async def discover_devices(self):
-        """Discovery not supported for NAD devices."""
         return []
 
-    async def _test_network_connection(self, host: str, port: int, connection_type: str) -> bool:
-        """Test network connectivity to NAD device."""
-        import asyncio
+    # ----------------------------------------------------------------- tests
+    async def _test_connection(self, connection_type: str, host: str, port: int) -> bool:
+        if connection_type == CONNECTION_BLUOS:
+            return await self._test_bluos(host, port)
+        return await self._test_classic_network(connection_type, host, port)
+
+    async def _test_bluos(self, host: str, port: int) -> bool:
+        try:
+            timeout = aiohttp.ClientTimeout(total=5)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(f"http://{host}:{port}/Status") as resp:
+                    if resp.status == 200:
+                        _LOG.info("BluOS device responded on %s:%d", host, port)
+                        return True
+                    _LOG.warning("BluOS device returned HTTP %d", resp.status)
+                    return False
+        except Exception as err:
+            _LOG.error("BluOS connection test failed: %s", err)
+            return False
+
+    async def _test_classic_network(self, connection_type: str, host: str, port: int) -> bool:
         from nad_receiver import NADReceiverTCP, NADReceiverTelnet
 
         try:
-            if connection_type == "TCP":
-                # Test TCP connection (D-Series)
+            if connection_type == CONNECTION_TCP:
                 receiver = NADReceiverTCP(host)
-                try:
-                    status = await asyncio.wait_for(
-                        asyncio.to_thread(receiver.status),
-                        timeout=5.0
-                    )
-                    if status is not None:
-                        _LOG.info("TCP connection successful, device responded")
-                        return True
-                except asyncio.TimeoutError:
-                    _LOG.warning("TCP connection timeout")
-                    return False
-            else:
-                # Test Telnet connection (T-Series)
-                receiver = NADReceiverTelnet(host, port)
-                try:
-                    power_state = await asyncio.wait_for(
-                        asyncio.to_thread(receiver.main_power, "?"),
-                        timeout=5.0
-                    )
-                    if power_state is not None:
-                        _LOG.info("Telnet connection successful, device responded: %s", power_state)
-                        return True
-                except asyncio.TimeoutError:
-                    _LOG.warning("Telnet connection timeout")
-                    return False
+                status = await asyncio.wait_for(asyncio.to_thread(receiver.status), timeout=5.0)
+                return status is not None
+            receiver = NADReceiverTelnet(host, port)
+            power = await asyncio.wait_for(asyncio.to_thread(receiver.main_power, "?"), timeout=5.0)
+            return power is not None
+        except asyncio.TimeoutError:
+            _LOG.warning("%s connection timeout to %s:%d", connection_type, host, port)
+            return False
         except Exception as err:
-            _LOG.error("Connection test failed: %s", err)
+            _LOG.error("%s connection test failed: %s", connection_type, err)
             return False
 
-    async def _test_serial_connection(self, serial_port: str) -> bool:
-        """Test serial port accessibility."""
-        import asyncio
-        import os
-
+    async def _test_serial(self, serial_port: str) -> bool:
         try:
-            # First check if the serial port device exists (Unix-like systems)
-            if os.name != 'nt' and not os.path.exists(serial_port):
+            if os.name != "nt" and not os.path.exists(serial_port):
                 _LOG.error("Serial port %s does not exist", serial_port)
                 return False
-
-            # Try to import and create NADReceiver
             from nad_receiver import NADReceiver
 
-            try:
-                receiver = NADReceiver(serial_port)
-                # Test with a simple query
-                power_state = await asyncio.wait_for(
-                    asyncio.to_thread(receiver.main_power, "?"),
-                    timeout=5.0
-                )
-                if power_state is not None:
-                    _LOG.info("RS232 connection successful, device responded: %s", power_state)
-                    return True
-                else:
-                    _LOG.warning("RS232 device did not respond")
-                    return False
-            except asyncio.TimeoutError:
-                _LOG.warning("RS232 connection timeout")
-                return False
+            receiver = NADReceiver(serial_port)
+            power = await asyncio.wait_for(asyncio.to_thread(receiver.main_power, "?"), timeout=5.0)
+            return power is not None
+        except asyncio.TimeoutError:
+            _LOG.warning("RS232 connection timeout on %s", serial_port)
+            return False
         except Exception as err:
             _LOG.error("Serial connection test failed: %s", err)
             return False

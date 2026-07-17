@@ -1,20 +1,20 @@
 {
   "driver_id": "nadav",
-  "version": "1.3.2",
+  "version": "2.0.0",
   "min_core_api": "0.22.0",
   "name": {
     "en": "NAD A/V Receivers & Amplifiers"
   },
   "icon": "uc:cloud-music",
   "description": {
-    "en": "Integration for NAD A/V receivers and amplifiers with RS232/Telnet control"
+    "en": "Control NAD A/V receivers and amplifiers. Supports classic T-Series (Telnet), D-Series (TCP) and RS-232 models, plus BluOS streaming models (M10, M33, C700, C658) with volume, source, transport controls and media browsing."
   },
   "developer": {
     "name": "Meir Miyara",
     "email": "meir.miyara@gmail.com"
   },
   "home_page": "https://github.com/mase1981/uc-intg-nadav",
-  "release_date": "2026-01-01",
+  "release_date": "2026-07-17",
   "setup_data_schema": {
     "title": {
       "en": "Integration setup"
@@ -28,7 +28,7 @@
         "field": {
           "label": {
             "value": {
-              "en": "This integration communicates with NAD A/V receivers via network or serial connection to provide complete control of your audio system."
+              "en": "This integration communicates with NAD A/V receivers and amplifiers over the network (Telnet / TCP / BluOS) or serial (RS-232) to provide control of your audio system. Enter your device details on the next screen."
             }
           }
         }
