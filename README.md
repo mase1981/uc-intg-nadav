@@ -1,6 +1,6 @@
 # NAD A/V Receivers & Amplifiers Integration for Unfolded Circle Remote 2/3
 
-Control your NAD audio gear directly from your Unfolded Circle Remote 2 or Remote 3 — from **BluOS streaming amplifiers** (M10, M33, C700, C658) to classic **T-Series AVRs**, **D-Series digital amps**, and **RS-232** models. One integration, four connection types, with volume, source/input switching, transport control, now-playing metadata, and media browsing.
+Control your NAD audio gear directly from your Unfolded Circle Remote 2 or Remote 3 - from **BluOS streaming amplifiers** (M10, M33, C700, C658) to classic **T-Series AVRs**, **D-Series digital amps**, and **RS-232** models. One integration, four connection types, with volume, source/input switching, transport control, now-playing metadata, and media browsing.
 
 ![NAD](https://img.shields.io/badge/NAD-A%2FV%20Receivers-blue)
 [![GitHub Release](https://img.shields.io/github/v/release/mase1981/uc-intg-nadav?style=flat-square)](https://github.com/mase1981/uc-intg-nadav/releases)
@@ -29,15 +29,15 @@ Your support helps maintain this integration. Thank you! ❤️
 
 ## What's New in 2.0
 
-- 🆕 **BluOS streaming support** — NAD M10, M33, C700, C658 and other BluOS models are now controllable over the network (port 11000), including a working volume slider, transport controls, now-playing metadata with album art, physical input selection, and a media browser.
-- 🆕 **Media browser** for BluOS models — browse and play **Inputs**, **Presets**, and the current **Queue**.
-- 🆕 **Select entities** — source/input, preset and repeat (BluOS); speaker A / speaker B (classic).
-- 🆕 **Sensor entities** — model, current source, connection status, and firmware version (classic).
-- ✅ **Fixed setup for BluOS devices** — previously an M10/M33 could not be set up because it does not speak the classic NAD Telnet protocol.
-- ✅ **Reliable entity control** — corrected device identifiers so entities register and respond in activities (volume slider now selectable).
+- 🆕 **BluOS streaming support** - NAD M10, M33, C700, C658 and other BluOS models are now controllable over the network (port 11000), including a working volume slider, transport controls, now-playing metadata with album art, physical input selection, and a media browser.
+- 🆕 **Media browser** for BluOS models - browse and play **Inputs**, **Presets**, and the current **Queue**.
+- 🆕 **Select entities** - source/input, preset and repeat (BluOS); speaker A / speaker B (classic).
+- 🆕 **Sensor entities** - model, current source, connection status, and firmware version (classic).
+- ✅ **Fixed setup for BluOS devices** - previously an M10/M33 could not be set up because it does not speak the classic NAD Telnet protocol.
+- ✅ **Reliable entity control** - corrected device identifiers so entities register and respond in activities (volume slider now selectable).
 - ⬆️ Rebuilt on `ucapi-framework 1.9.5` / `ucapi 0.7.0`.
 
-> **Upgrading from 1.x?** Existing Telnet / TCP / RS-232 devices are migrated automatically on first start — no need to remove and re-add them. You may need to re-add entities to your activities.
+> **Upgrading from 1.x?** Existing Telnet / TCP / RS-232 devices are migrated automatically on first start - no need to remove and re-add them. You may need to re-add entities to your activities.
 
 ---
 
@@ -46,7 +46,7 @@ Your support helps maintain this integration. Thank you! ❤️
 | Connection | Default Port | Typical Models | Protocol |
 |---|---|---|---|
 | **BluOS / Streaming** | 11000 | M10 (v1/v2), M33, C700, C658, C399 (with BluOS) and other BluOS players | BluOS Custom Integration API (HTTP) |
-| **Telnet** | 23 | Classic T-Series AVRs (T748, T758, T778, T787…) | NAD Telnet (`Main.*` commands) |
+| **Telnet** | 23 | Classic T-Series AVRs (T748, T758, T778, T787...) | NAD Telnet (`Main.*` commands) |
 | **TCP** | 53 | D-Series digital amps (e.g. D 7050) | NAD TCP |
 | **RS-232** | serial | Any NAD model with a DB9 serial port | NAD RS-232 |
 
@@ -56,26 +56,26 @@ Your support helps maintain this integration. Thank you! ❤️
 
 ## Features by Connection Type
 
-### 🎵 BluOS / Streaming (M10, M33, C700, C658 …)
+### 🎵 BluOS / Streaming (M10, M33, C700, C658 ...)
 
-- **Media player** — power (play/standby), volume slider (0–100), mute, play/pause, stop, next/previous, seek, shuffle, repeat.
-- **Now playing** — title, artist, album, and album art on the Remote.
-- **Input selection** — switch between physical inputs (HDMI eARC, Optical, Coaxial, Analog, Phono, Bluetooth) discovered live from the device.
-- **Media browser** — browse and play **Inputs**, **Presets**, and the current **Queue**.
-- **Select entities** — Source (inputs), Preset, Repeat mode.
-- **Sensors** — Model, Current Source, Connection status.
+- **Media player** - power (play/standby), volume slider (0-100), mute, play/pause, stop, next/previous, seek, shuffle, repeat.
+- **Now playing** - title, artist, album, and album art on the Remote.
+- **Input selection** - switch between physical inputs (HDMI eARC, Optical, Coaxial, Analog, Phono, Bluetooth) discovered live from the device.
+- **Media browser** - browse and play **Inputs**, **Presets**, and the current **Queue**.
+- **Select entities** - Source (inputs), Preset, Repeat mode.
+- **Sensors** - Model, Current Source, Connection status.
 
 ### 🎛️ Classic T-Series / D-Series / RS-232
 
-- **Media player** — power on/off/toggle, volume slider (configurable dB range), volume up/down, mute/unmute, source selection.
-- **Select entities** — Source, Speaker A, Speaker B.
-- **Sensors** — Model, Firmware Version, Current Source, Connection status.
+- **Media player** - power on/off/toggle, volume slider (configurable dB range), volume up/down, mute/unmute, source selection.
+- **Select entities** - Source, Speaker A, Speaker B.
+- **Sensors** - Model, Firmware Version, Current Source, Connection status.
 
 ### 🎚️ General
 
-- **Multiple devices** — control any number of NAD units, mixing BluOS and classic connections.
-- **Independent configuration** — each device is set up and stored separately.
-- **Reboot & standby survival** — devices reconnect automatically after Remote or device restarts.
+- **Multiple devices** - control any number of NAD units, mixing BluOS and classic connections.
+- **Independent configuration** - each device is set up and stored separately.
+- **Reboot & standby survival** - devices reconnect automatically after Remote or device restarts.
 
 ---
 
@@ -85,13 +85,21 @@ Your support helps maintain this integration. Thank you! ❤️
 1. Go to the [**Releases**](https://github.com/mase1981/uc-intg-nadav/releases) page.
 2. Download the latest `uc-intg-nadav-<version>-aarch64.tar.gz`.
 3. Open your Remote's web interface (`http://your-remote-ip`).
-4. Go to **Settings → Integrations → Add Integration → Install Custom**.
+4. Go to **Settings -> Integrations -> Add Integration -> Install Custom**.
 5. Upload the downloaded `.tar.gz` and follow the setup.
 
 ### Option 2: Docker (Advanced)
 
+The integration is available as a pre-built Docker image from GitHub Container Registry.
+
 **Image**: `ghcr.io/mase1981/uc-intg-nadav:latest`
 
+**Docker Run (one-liner):**
+```bash
+docker run -d --name uc-intg-nadav --restart unless-stopped --network host -v ./data:/data -e UC_CONFIG_HOME=/data -e UC_INTEGRATION_INTERFACE=0.0.0.0 -e UC_INTEGRATION_HTTP_PORT=9090 ghcr.io/mase1981/uc-intg-nadav:latest
+```
+
+**Docker Compose:**
 ```yaml
 services:
   uc-intg-nadav:
@@ -111,21 +119,21 @@ services:
 
 ## Configuration
 
-### Step 1 — Prepare your device
+### Step 1 - Prepare your device
 - Power the device on and connect it to your network (Ethernet recommended for classic models).
 - Give it a **static IP** or DHCP reservation.
 - Note its **IP address**.
 - For **BluOS** models, confirm the unit shows up in the BluOS app.
 
-### Step 2 — Add the integration
-1. Go to **Settings → Integrations** and start the NAD setup.
+### Step 2 - Add the integration
+1. Go to **Settings -> Integrations** and start the NAD setup.
 2. Fill in the form:
-   - **Device Name** — e.g. "Living Room M10".
-   - **Connection Type** — choose **Telnet**, **BluOS / Streaming**, **TCP**, or **RS-232**.
-   - **IP Address** — the device IP (network models).
-   - **Port** — leave at **0** to auto-select the right port (BluOS 11000 / Telnet 23 / TCP 53), or enter a custom port.
-   - **Serial Port** — only for RS-232 (e.g. `/dev/ttyUSB0`).
-3. For **Telnet / RS-232**, a second screen lets you name your input **Sources** (Source 1–12). BluOS and TCP discover sources automatically.
+   - **Device Name** - e.g. "Living Room M10".
+   - **Connection Type** - choose **Telnet**, **BluOS / Streaming**, **TCP**, or **RS-232**.
+   - **IP Address** - the device IP (network models).
+   - **Port** - leave at **0** to auto-select the right port (BluOS 11000 / Telnet 23 / TCP 53), or enter a custom port.
+   - **Serial Port** - only for RS-232 (e.g. `/dev/ttyUSB0`).
+3. For **Telnet / RS-232**, a second screen lets you name your input **Sources** (Source 1-12). BluOS and TCP discover sources automatically.
 4. The integration tests the connection and creates the entities.
 
 ### Entities created
@@ -140,8 +148,8 @@ Add the media player (and any selects/sensors you want) to your activities and p
 
 ## Volume Notes
 
-- **BluOS** models report and accept volume as **0–100%** natively — the slider maps 1:1.
-- **Classic** models use a **dB range** (default **-92 dB** to **-20 dB**, step **4 dB**), presented on the Remote as **0–100%**:
+- **BluOS** models report and accept volume as **0-100%** natively - the slider maps 1:1.
+- **Classic** models use a **dB range** (default **-92 dB** to **-20 dB**, step **4 dB**), presented on the Remote as **0-100%**:
 
   | Remote Slider | NAD Volume |
   |---|---|
@@ -155,7 +163,7 @@ Add the media player (and any selects/sensors you want) to your activities and p
 
 | Symptom | Cause / Fix |
 |---|---|
-| **M10 / M33 / BluOS unit "Connection refused"** | These are BluOS models — choose **BluOS / Streaming**, not Telnet. They do not respond on port 23. |
+| **M10 / M33 / BluOS unit "Connection refused"** | These are BluOS models - choose **BluOS / Streaming**, not Telnet. They do not respond on port 23. |
 | **No volume slider in an activity** | Make sure the **media player** entity (not just a button) is added to the activity; the media player exposes the numeric volume feature. |
 | **Setup fails immediately** | Verify the IP is correct and the device is powered on and on the same subnet. Leave **Port = 0** to auto-select. |
 | **Sources empty (classic)** | Re-run setup and enter names for the inputs you use on the Sources screen. |
@@ -172,7 +180,7 @@ Add the media player (and any selects/sensors you want) to your activities and p
 
 ## License
 
-Mozilla Public License 2.0 (MPL-2.0) — see the LICENSE file.
+Mozilla Public License 2.0 (MPL-2.0) - see the LICENSE file.
 
 ## Support & Community
 
@@ -183,4 +191,4 @@ Mozilla Public License 2.0 (MPL-2.0) — see the LICENSE file.
 
 ---
 
-**Made with ❤️ for the Unfolded Circle and NAD Communities** — Meir Miyara
+**Made with ❤️ for the Unfolded Circle and NAD Communities** - Meir Miyara
