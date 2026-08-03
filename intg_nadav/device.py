@@ -148,7 +148,12 @@ class NADDevice(PollingDevice):
     # -------------------------------------------------------------- lifecycle
     def _create_client(self) -> BluOSClient | ClassicNADClient:
         if self.is_bluos:
-            return BluOSClient(self._device_config.host, self._device_config.port, self.log_id)
+            return BluOSClient(
+                self._device_config.host,
+                self._device_config.port,
+                self.log_id,
+                self._device_config.volume_step,
+            )
         return ClassicNADClient(self._device_config, self.log_id)
 
     async def establish_connection(self) -> BluOSClient | ClassicNADClient:

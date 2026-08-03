@@ -86,6 +86,11 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
                     "label": {"en": "Serial Port (RS-232 only)"},
                     "field": {"text": {"value": "/dev/ttyUSB0"}},
                 },
+                {
+                    "id": "volume_step",
+                    "label": {"en": "Volume Step (per button press)"},
+                    "field": {"number": {"value": 5, "min": 1, "max": 20}},
+                },
             ],
         )
 
@@ -101,6 +106,7 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
         host = input_values.get("host", "").strip()
         serial_port = input_values.get("serial_port", "/dev/ttyUSB0").strip()
         port = self._resolve_port(input_values.get("port", 0), connection_type)
+        volume_step = self._resolve_volume_step(input_values.get("volume_step", 5))
 
         if connection_type == CONNECTION_RS232:
             if not serial_port:
@@ -130,6 +136,7 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
                 host=host or None,
                 port=port,
                 serial_port=serial_port,
+                volume_step=volume_step,
             )
 
         # Telnet / RS232 -> ask for source names.
@@ -140,6 +147,7 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
             "host": host or None,
             "port": port,
             "serial_port": serial_port,
+            "volume_step": volume_step,
         }
         return self._source_configuration_screen()
 
@@ -151,6 +159,13 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
         if port <= 0:
             return DEFAULT_PORTS.get(connection_type, 0)
         return port
+
+    def _resolve_volume_step(self, raw: Any) -> int:
+        try:
+            step = int(raw)
+        except (ValueError, TypeError):
+            step = 5
+        return max(1, min(20, step))
 
     def _build_classic_with_sources(self, input_values: dict[str, Any]) -> NADDeviceConfig | SetupError:
         source_map: dict[int, str] = {}
@@ -171,6 +186,7 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
             host=info.get("host"),
             port=info.get("port", DEFAULT_PORTS[CONNECTION_TELNET]),
             serial_port=info.get("serial_port", "/dev/ttyUSB0"),
+            volume_step=info.get("volume_step", 5),
             sources=source_map,
         )
 

@@ -23,10 +23,11 @@ _LOG = logging.getLogger(__name__)
 class BluOSClient:
     """Async BluOS API client with parsed state and debounced volume/mute."""
 
-    def __init__(self, host: str, port: int = 11000, log_id: str = "BluOS") -> None:
+    def __init__(self, host: str, port: int = 11000, log_id: str = "BluOS", volume_step: int = 5) -> None:
         self._host = host
         self._port = port
         self._log_id = log_id
+        self._volume_step = volume_step
         self._base_url = f"http://{host}:{port}"
         self._session: aiohttp.ClientSession | None = None
 
@@ -412,12 +413,12 @@ class BluOSClient:
 
     async def volume_up(self) -> bool:
         current = self._target_volume if self._target_volume is not None else self._volume
-        self._target_volume = min(100, current + 1)
+        self._target_volume = min(100, current + self._volume_step)
         return await self.set_volume(self._target_volume)
 
     async def volume_down(self) -> bool:
         current = self._target_volume if self._target_volume is not None else self._volume
-        self._target_volume = max(0, current - 1)
+        self._target_volume = max(0, current - self._volume_step)
         return await self.set_volume(self._target_volume)
 
     async def set_mute(self, muted: bool) -> bool:

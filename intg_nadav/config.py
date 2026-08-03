@@ -38,7 +38,7 @@ class NADDeviceConfig:
     serial_port: str = "/dev/ttyUSB0"
     min_volume: int = -92
     max_volume: int = -20
-    volume_step: int = 4
+    volume_step: int = 5
     sources: dict[int, str] | None = None
 
     @property

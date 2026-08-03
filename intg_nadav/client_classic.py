@@ -242,19 +242,23 @@ class ClassicNADClient:
         return True
 
     async def volume_up(self) -> bool:
+        step = self._config.volume_step
         if self._is_tcp:
-            await self._run(self._receiver.set_volume, self._percent_to_nad_vol(min(100, self._volume + 1)))
+            await self._run(self._receiver.set_volume, self._percent_to_nad_vol(min(100, self._volume + step)))
         else:
-            await self._run(self._receiver.main_volume, "+")
-        self._volume = min(100, self._volume + 1)
+            for _ in range(step):
+                await self._run(self._receiver.main_volume, "+")
+        self._volume = min(100, self._volume + step)
         return True
 
     async def volume_down(self) -> bool:
+        step = self._config.volume_step
         if self._is_tcp:
-            await self._run(self._receiver.set_volume, self._percent_to_nad_vol(max(0, self._volume - 1)))
+            await self._run(self._receiver.set_volume, self._percent_to_nad_vol(max(0, self._volume - step)))
         else:
-            await self._run(self._receiver.main_volume, "-")
-        self._volume = max(0, self._volume - 1)
+            for _ in range(step):
+                await self._run(self._receiver.main_volume, "-")
+        self._volume = max(0, self._volume - step)
         return True
 
     async def set_mute(self, mute: bool) -> bool:
