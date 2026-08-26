@@ -111,14 +111,14 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
         if connection_type == CONNECTION_RS232:
             if not serial_port:
                 return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
-            identifier = f"nad_{sanitize_identifier(serial_port)}"
+            identifier = self.selected_config_id or f"nad_{sanitize_identifier(serial_port)}"
             _LOG.info("Testing serial port %s...", serial_port)
             if not await self._test_serial(serial_port):
                 return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
         else:
             if not host:
                 return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
-            identifier = f"nad_{sanitize_identifier(host)}_{port}"
+            identifier = self.selected_config_id or f"nad_{sanitize_identifier(host)}_{port}"
             _LOG.info("Testing %s connectivity to %s:%d...", connection_type, host, port)
             if not await self._test_connection(connection_type, host, port):
                 _LOG.error("Failed to connect to %s:%d (%s)", host, port, connection_type)
