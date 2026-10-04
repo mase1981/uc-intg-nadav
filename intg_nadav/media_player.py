@@ -120,8 +120,7 @@ class NADMediaPlayer(MediaPlayerEntity):
     async def browse(self, options: BrowseOptions) -> BrowseResults | StatusCodes:
         if not self._is_bluos:
             return StatusCodes.NOT_IMPLEMENTED
-        client = self._device.client
-        if client is None or not client.is_connected:
+        if not await self._device.ensure_connected():
             return StatusCodes.SERVICE_UNAVAILABLE
         return await browser.browse(self._device, options)
 
@@ -132,7 +131,7 @@ class NADMediaPlayer(MediaPlayerEntity):
         self, entity: media_player.MediaPlayer, cmd_id: str, params: dict[str, Any] | None
     ) -> StatusCodes:
         d = self._device
-        if d.client is None or not d.client.is_connected:
+        if not await d.ensure_connected():
             _LOG.warning("[%s] Device not connected, command %s rejected", self.id, cmd_id)
             return StatusCodes.SERVICE_UNAVAILABLE
         try:

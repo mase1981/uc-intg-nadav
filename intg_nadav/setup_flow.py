@@ -13,7 +13,7 @@ import os
 from typing import Any
 
 import aiohttp
-from ucapi import IntegrationSetupError, RequestUserInput, SetupError
+from ucapi import RequestUserInput, SetupError
 from ucapi_framework import BaseSetupFlow
 
 from intg_nadav.config import (
@@ -36,10 +36,33 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
         super().__init__(*args, **kwargs)
         self._device_info: dict[str, Any] = {}
 
-    def get_manual_entry_form(self) -> RequestUserInput:
+    def get_manual_entry_form(self, error: str = "", values: dict | None = None) -> RequestUserInput:
+        """The device form, with an optional problem shown at the top.
+
+        :param values: what the user typed; on Update defaults to the saved device
+        """
+        if values is None:
+            values = {}
+            saved = self.selected_config_entry
+            if saved:
+                values = {
+                    "name": saved.name,
+                    "connection_type": saved.connection_type,
+                    "host": saved.host or "",
+                    "port": saved.port,
+                    "serial_port": saved.serial_port,
+                    "volume_step": saved.volume_step,
+                }
+        fields = []
+        if error:
+            fields.append({
+                "id": "error",
+                "label": {"en": "Problem"},
+                "field": {"label": {"value": {"en": error}}},
+            })
         return RequestUserInput(
             {"en": "Configure NAD Device"},
-            [
+            fields + [
                 {
                     "id": "info",
                     "label": {"en": "Before you begin"},
@@ -56,13 +79,13 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
                 {
                     "id": "name",
                     "label": {"en": "Device Name"},
-                    "field": {"text": {"value": "NAD Receiver"}},
+                    "field": {"text": {"value": values.get("name", "NAD Receiver")}},
                 },
                 {
                     "id": "connection_type",
                     "label": {"en": "Connection Type"},
                     "field": {"dropdown": {
-                        "value": CONNECTION_TELNET,
+                        "value": values.get("connection_type", CONNECTION_TELNET),
                         "items": [
                             {"id": CONNECTION_TELNET, "label": {"en": "Telnet (T-Series AVR - Port 23)"}},
                             {"id": CONNECTION_BLUOS, "label": {"en": "BluOS / Streaming (M10, M33, C700, C658)"}},
@@ -74,22 +97,22 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
                 {
                     "id": "host",
                     "label": {"en": "IP Address (network models)"},
-                    "field": {"text": {"value": ""}},
+                    "field": {"text": {"value": values.get("host", "")}},
                 },
                 {
                     "id": "port",
                     "label": {"en": "Port (0 = auto: BluOS 11000, Telnet 23, TCP 53)"},
-                    "field": {"number": {"value": 0, "min": 0, "max": 65535}},
+                    "field": {"number": {"value": values.get("port", 0), "min": 0, "max": 65535}},
                 },
                 {
                     "id": "serial_port",
                     "label": {"en": "Serial Port (RS-232 only)"},
-                    "field": {"text": {"value": "/dev/ttyUSB0"}},
+                    "field": {"text": {"value": values.get("serial_port", "/dev/ttyUSB0")}},
                 },
                 {
                     "id": "volume_step",
                     "label": {"en": "Volume Step (per button press)"},
-                    "field": {"number": {"value": 5, "min": 1, "max": 20}},
+                    "field": {"number": {"value": values.get("volume_step", 5), "min": 1, "max": 20}},
                 },
             ],
         )
@@ -101,28 +124,43 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
         if "source_1" in input_values:
             return self._build_classic_with_sources(input_values)
 
-        name = input_values.get("name", "").strip()
-        connection_type = input_values.get("connection_type", CONNECTION_TELNET)
-        host = input_values.get("host", "").strip()
-        serial_port = input_values.get("serial_port", "/dev/ttyUSB0").strip()
+        name = str(input_values.get("name") or "").strip()
+        connection_type = input_values.get("connection_type") or CONNECTION_TELNET
+        host = str(input_values.get("host") or "").strip()
+        serial_port = str(input_values.get("serial_port") or "/dev/ttyUSB0").strip()
         port = self._resolve_port(input_values.get("port", 0), connection_type)
         volume_step = self._resolve_volume_step(input_values.get("volume_step", 5))
+        values = {
+            "name": name,
+            "connection_type": connection_type,
+            "host": host,
+            "port": input_values.get("port", 0),
+            "serial_port": serial_port,
+            "volume_step": volume_step,
+        }
 
         if connection_type == CONNECTION_RS232:
             if not serial_port:
-                return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
+                return self.get_manual_entry_form("Enter the serial port, e.g. /dev/ttyUSB0.", values)
             identifier = self.selected_config_id or f"nad_{sanitize_identifier(serial_port)}"
             _LOG.info("Testing serial port %s...", serial_port)
             if not await self._test_serial(serial_port):
-                return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
+                return self.get_manual_entry_form(
+                    f"Could not open the serial port {serial_port}. Check the port name and the cable.", values
+                )
         else:
             if not host:
-                return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
+                return self.get_manual_entry_form("Enter the device's IP address.", values)
             identifier = self.selected_config_id or f"nad_{sanitize_identifier(host)}_{port}"
             _LOG.info("Testing %s connectivity to %s:%d...", connection_type, host, port)
             if not await self._test_connection(connection_type, host, port):
                 _LOG.error("Failed to connect to %s:%d (%s)", host, port, connection_type)
-                return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
+                return self.get_manual_entry_form(
+                    f"No answer from {host} on port {port} ({connection_type}). Check that the device is "
+                    "powered on, the IP address and connection type are correct, and that the Remote and "
+                    "the device are on the same network.",
+                    values,
+                )
 
         display_name = name or f"NAD {connection_type}"
 
@@ -167,7 +205,7 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
             step = 5
         return max(1, min(20, step))
 
-    def _build_classic_with_sources(self, input_values: dict[str, Any]) -> NADDeviceConfig | SetupError:
+    def _build_classic_with_sources(self, input_values: dict[str, Any]) -> NADDeviceConfig | RequestUserInput:
         source_map: dict[int, str] = {}
         for i in range(1, 13):
             name = input_values.get(f"source_{i}", "").strip()
@@ -175,7 +213,7 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
                 source_map[i] = name
         if not source_map:
             _LOG.warning("No sources configured")
-            return SetupError(error_type=IntegrationSetupError.OTHER)
+            return self._source_configuration_screen("Enter a name for at least one input source.")
 
         info = self._device_info
         _LOG.info("Creating NAD %s config with %d sources", info["connection_type"], len(source_map))
@@ -190,8 +228,17 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
             sources=source_map,
         )
 
-    def _source_configuration_screen(self) -> RequestUserInput:
-        fields = [{
+    def _source_configuration_screen(self, error: str = "") -> RequestUserInput:
+        saved = self.selected_config_entry
+        saved_sources = (saved.sources or {}) if saved else {}
+        fields = []
+        if error:
+            fields.append({
+                "id": "error",
+                "label": {"en": "Problem"},
+                "field": {"label": {"value": {"en": error}}},
+            })
+        fields += [{
             "id": "info",
             "label": {"en": "Input Source Names"},
             "field": {"label": {"value": {"en": (
@@ -204,7 +251,8 @@ class NADSetupFlow(BaseSetupFlow[NADDeviceConfig]):
             fields.append({
                 "id": f"source_{i}",
                 "label": {"en": f"Source {i}{suffix}"},
-                "field": {"text": {"value": ""}},
+                # Saved configs come back from JSON with string keys.
+                "field": {"text": {"value": saved_sources.get(i) or saved_sources.get(str(i)) or ""}},
             })
         return RequestUserInput({"en": "Configure Input Sources"}, fields)
 

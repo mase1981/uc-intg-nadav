@@ -21,6 +21,9 @@ from intg_nadav.config import NADDeviceConfig
 
 _LOG = logging.getLogger(__name__)
 
+_CONNECT_ATTEMPTS = 3
+_CONNECT_RETRY_DELAY = 2.0
+
 
 class NADDevice(PollingDevice):
     """NAD receiver/amplifier device using the polling pattern."""
@@ -32,6 +35,7 @@ class NADDevice(PollingDevice):
         self._connect_lock: asyncio.Lock = asyncio.Lock()
         self._client: BluOSClient | ClassicNADClient | None = None
         self._refresh_counter = 0
+        self._unreachable_logged = False
 
     # ------------------------------------------------------------------ meta
     @property
@@ -157,16 +161,58 @@ class NADDevice(PollingDevice):
         return ClassicNADClient(self._device_config, self.log_id)
 
     async def establish_connection(self) -> BluOSClient | ClassicNADClient:
+        """Connect to the device. Never raises.
+
+        The framework starts the poll loop only when this returns, and does not try
+        again until the Remote next wakes. Right after a wake the Remote's network is
+        often not back yet, so a failure here would leave the device unavailable for
+        hours. Instead: a few quick attempts, then the poll loop keeps retrying.
+        """
+        for attempt in range(1, _CONNECT_ATTEMPTS + 1):
+            if await self._try_connect():
+                break
+            if attempt < _CONNECT_ATTEMPTS:
+                await asyncio.sleep(_CONNECT_RETRY_DELAY)
+        # The framework does not refresh entities on connect: push the state now.
+        self.push_update()
+        return self._client
+
+    async def _try_connect(self) -> bool:
+        """One connection attempt; logs a failure once per outage."""
         async with self._connect_lock:
             if self._client is None:
                 self._client = self._create_client()
-            if not self._client.is_connected:
+            if self._client.is_connected:
+                return True
+            try:
                 await self._client.connect()
-            _LOG.info("[%s] Connection established", self.log_id)
-            return self._client
+            except Exception as err:  # pylint: disable=broad-exception-caught
+                if self._unreachable_logged:
+                    _LOG.debug("[%s] Connection failed: %s", self.log_id, err)
+                else:
+                    _LOG.warning("[%s] Connection failed, will keep retrying: %s", self.log_id, err)
+                    self._unreachable_logged = True
+                return False
+            if self._unreachable_logged:
+                _LOG.info("[%s] Connection restored", self.log_id)
+            else:
+                _LOG.info("[%s] Connection established", self.log_id)
+            self._unreachable_logged = False
+            return True
+
+    async def ensure_connected(self) -> bool:
+        """Connect now if not connected (a button press should not wait for the next poll)."""
+        if self._client is not None and self._client.is_connected:
+            return True
+        ok = await self._try_connect()
+        if ok:
+            self.push_update()
+        return ok
 
     async def poll_device(self) -> None:
-        if self._client is None:
+        if self._client is None or not self._client.is_connected:
+            if await self._try_connect():
+                self.push_update()
             return
         try:
             await self._client.refresh()

@@ -59,6 +59,8 @@ class NADSourceSelect(SelectEntity):
 
     async def _handle_command(self, entity, cmd_id: str, params: dict[str, Any] | None) -> StatusCodes:
         if cmd_id == select.Commands.SELECT_OPTION:
+            if not await self._device.ensure_connected():
+                return StatusCodes.SERVICE_UNAVAILABLE
             option = params.get("option", "") if params else ""
             if not option:
                 return StatusCodes.BAD_REQUEST
@@ -95,6 +97,8 @@ class NADPresetSelect(SelectEntity):
 
     async def _handle_command(self, entity, cmd_id: str, params: dict[str, Any] | None) -> StatusCodes:
         if cmd_id == select.Commands.SELECT_OPTION:
+            if not await self._device.ensure_connected():
+                return StatusCodes.SERVICE_UNAVAILABLE
             option = params.get("option", "") if params else ""
             for preset in self._device.presets:
                 if preset.get("name") == option:
@@ -131,6 +135,8 @@ class NADRepeatSelect(SelectEntity):
 
     async def _handle_command(self, entity, cmd_id: str, params: dict[str, Any] | None) -> StatusCodes:
         if cmd_id == select.Commands.SELECT_OPTION:
+            if not await self._device.ensure_connected():
+                return StatusCodes.SERVICE_UNAVAILABLE
             option = params.get("option", "") if params else ""
             repeat_val = {"Off": "OFF", "All": "ALL", "One": "ONE"}.get(option)
             if repeat_val is None:
@@ -175,6 +181,8 @@ class _SpeakerSelect(SelectEntity):
 
     async def _handle_command(self, entity, cmd_id: str, params: dict[str, Any] | None) -> StatusCodes:
         if cmd_id == select.Commands.SELECT_OPTION:
+            if not await self._device.ensure_connected():
+                return StatusCodes.SERVICE_UNAVAILABLE
             option = params.get("option", "") if params else ""
             if option not in SPEAKER_OPTIONS:
                 return StatusCodes.BAD_REQUEST
